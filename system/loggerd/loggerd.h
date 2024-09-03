@@ -57,19 +57,21 @@ public:
 const EncoderInfo main_road_encoder_info = {
   .publish_name = "roadEncodeData",
   .filename = "fcamera.hevc",
+  .record = false,
   INIT_ENCODE_FUNCTIONS(RoadEncode),
 };
 
 const EncoderInfo main_wide_road_encoder_info = {
   .publish_name = "wideRoadEncodeData",
   .filename = "ecamera.hevc",
+  .record = false,
   INIT_ENCODE_FUNCTIONS(WideRoadEncode),
 };
 
 const EncoderInfo main_driver_encoder_info = {
   .publish_name = "driverEncodeData",
   .filename = "dcamera.hevc",
-  .record = Params().getBool("RecordFront"),
+  .record = false, //Params().getBool("RecordFront"),
   INIT_ENCODE_FUNCTIONS(DriverEncode),
 };
 

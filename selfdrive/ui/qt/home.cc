@@ -60,6 +60,9 @@ void HomeWindow::offroadTransition(bool offroad) {
     slayout->setCurrentWidget(home);
   } else {
     slayout->setCurrentWidget(onroad);
+
+    UIState* s = uiState();
+    s->show_brightness_timer = (int)(10. / 0.05);
   }
 }
 
@@ -68,6 +71,9 @@ void HomeWindow::mousePressEvent(QMouseEvent* e) {
   if ((onroad->isVisible() || body->isVisible()) && (!sidebar->isVisible() || e->x() > sidebar->width())) {
     sidebar->setVisible(!sidebar->isVisible());
   }
+
+  UIState* s = uiState();
+  s->show_brightness_timer = 100;
 }
 
 void HomeWindow::mouseDoubleClickEvent(QMouseEvent* e) {
