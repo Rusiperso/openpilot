@@ -80,7 +80,18 @@ function launch {
 
   # write tmux scrollback to a file
   tmux capture-pane -pq -S-1000 > /tmp/launch_log
-
+  if python -c "import flask" > /dev/null 2>&1; then
+    echo "Flask already installed."
+  else
+    echo "Flask installing."
+    pip install flask
+  fi
+  if python -c "import shapely" > /dev/null 2>&1; then
+    echo "shapely already installed."
+  else
+    echo "shapely installing."
+    pip install shapely
+  fi
   # start manager
   cd system/manager
   if [ ! -f $DIR/prebuilt ]; then
