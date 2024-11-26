@@ -31,7 +31,7 @@ static void gm_rx_hook(const CANPacket_t *to_push) {
   const int GM_STANDSTILL_THRSLD = 10;  // 0.311kph
   // panda interceptor threshold needs to be equivalent to openpilot threshold to avoid controls mismatches
   // If thresholds are mismatched then it is possible for panda to see the gas fall and rise while openpilot is in the pre-enabled state
-  const int GM_GAS_INTERCEPTOR_THRESHOLD = 515; // (675 + 355) / 2 ratio between offset and gain from dbc file
+  const int GM_GAS_INTERCEPTOR_THRESHOLD = 550; // (675 + 355) / 2 ratio between offset and gain from dbc file
   #define GM_GET_INTERCEPTOR(msg) (((GET_BYTE((msg), 0) << 8) + GET_BYTE((msg), 1) + (GET_BYTE((msg), 2) << 8) + GET_BYTE((msg), 3)) / 2U) // avg between 2 tracks
 
 
@@ -105,7 +105,11 @@ static void gm_rx_hook(const CANPacket_t *to_push) {
     }
 
     if (addr == 0xBD) {
-      regen_braking = (GET_BYTE(to_push, 0) >> 4) != 0U;
+      regen_braking = (GET_BYTE(to_push, 0) >> 4) != 0U; // 1. 리젠 브레이크 상태 확인
+      // 2. 롱컨트롤 허용 여부 확인
+      if (!get_longitudinal_allowed()) {
+        //tx = false;
+      }
     }
 
     // Pedal Interceptor
@@ -244,7 +248,7 @@ static safety_config gm_init(uint16_t param) {
     .max_brake = 400,
   };
 
-  static const CanMsg GM_ASCM_TX_MSGS[] = {{0x180, 0, 4}, {0x409, 0, 7}, {0x40A, 0, 7}, {0x2CB, 0, 8}, {0x370, 0, 6}, {0x200, 0, 6}, {0x1E1, 0, 7},  // pt bus
+  static const CanMsg GM_ASCM_TX_MSGS[] = {{0x180, 0, 4}, {0x409, 0, 7}, {0x40A, 0, 7}, {0x2CB, 0, 8}, {0x370, 0, 6}, {0x200, 0, 6}, {0x1E1, 0, 7}, {0xBD, 0, 7},// pt bus
                                            {0xA1, 1, 7}, {0x306, 1, 8}, {0x308, 1, 7}, {0x310, 1, 2},   // obs bus
                                            {0x315, 2, 5}};  // ch bus
 
