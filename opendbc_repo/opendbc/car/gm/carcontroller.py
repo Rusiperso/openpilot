@@ -149,7 +149,7 @@ class CarController(CarControllerBase):
         
       # Gas/regen, brakes, and UI commands - all at 25Hz
       if self.frame % 4 == 0:
-        stopping = actuators.longControlState == LongCtrlState.stopping
+        stopping = actuators.longControlState == LongCtrlState.stopping or CS.softHoldActive > 0
 
         # Pitch compensated acceleration;
         # TODO: include future pitch (sm['modelDataV2'].orientation.y) to account for long actuator delay
