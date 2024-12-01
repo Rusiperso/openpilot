@@ -138,7 +138,7 @@ class CarController(CarControllerBase):
       # Auto Cruise Test...
       if CS.out.activateCruise and not CS.out.cruiseState.enabled:
         if (self.frame - self.last_button_frame) * DT_CTRL > 0.2:
-          can_sends.append(gmcan.create_buttons(self.packer_pt, CanBus.POWERTRAIN, CS.buttons_counter, CruiseButtons.DECEL_SET))
+          can_sends.append(gmcan.create_buttons(self.packer_pt, CanBus.POWERTRAIN, (CS.buttons_counter + 1) % 4, CruiseButtons.DECEL_SET))
           self.last_button_frame = self.frame
       elif actuators.longControlState == LongCtrlState.starting:
         if (self.frame - self.last_button_frame) * DT_CTRL > 0.02:
