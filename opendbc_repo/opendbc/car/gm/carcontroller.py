@@ -137,7 +137,15 @@ class CarController(CarControllerBase):
 
       # Auto Cruise Test...
       if CS.out.activateCruise and not CS.out.cruiseState.enabled:
-        can_sends.append(gmcan.create_buttons(self.packer_pt, CanBus.POWERTRAIN, CS.buttons_counter, CruiseButtons.DECEL_SET))
+        if (self.frame - self.last_button_frame) * DT_CTRL > 0.2:
+          can_sends.append(gmcan.create_buttons(self.packer_pt, CanBus.POWERTRAIN, CS.buttons_counter, CruiseButtons.DECEL_SET))
+          self.last_button_frame = self.frame
+      elif actuators.longControlState == LongCtrlState.starting:
+        if (self.frame - self.last_button_frame) * DT_CTRL > 0.02:
+          print("RES_ACCEL")
+          can_sends.append(gmcan.create_buttons(self.packer_pt, CanBus.POWERTRAIN, CS.buttons_counter, CruiseButtons.RES_ACCEL))
+          self.last_button_frame = self.frame
+
         
       # Gas/regen, brakes, and UI commands - all at 25Hz
       if self.frame % 4 == 0:
