@@ -99,6 +99,8 @@ class HyundaiFlags(IntFlag):
   TCU_GEARS = 2 ** 22
 
   MIN_STEER_32_MPH = 2 ** 23
+  
+  ANGLE_CONTROL = 2 ** 24
 
 class HyundaiExtFlags(IntFlag):
   HAS_SCC13 = 1
@@ -663,6 +665,13 @@ class CAR(Platforms):
     [HyundaiCarDocs("Kia Soul EV 2019", car_parts=CarParts.common([CarHarness.hyundai_c]))],
     CarSpecs(mass=1695, wheelbase=2.6, steerRatio=13.75),
     flags=HyundaiFlags.CHECKSUM_CRC8 | HyundaiFlags.EV,
+  )
+  KIA_EV9 = HyundaiCanFDPlatformConfig(
+    [
+      HyundaiCarDocs("KIA EV9 (MV)", car_parts=CarParts.common([CarHarness.hyundai_k])),
+    ],
+    CarSpecs(mass=2625, wheelbase=3.1, steerRatio=16.02),
+    flags=HyundaiFlags.EV | HyundaiFlags.ANGLE_CONTROL,
   )
 
 

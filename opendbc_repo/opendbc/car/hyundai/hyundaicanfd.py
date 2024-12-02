@@ -95,86 +95,121 @@ class CanBus(CanBusBase):
 #  HDA_MODE1         8:8:8    8:8:8     K8      8:8:8
 #  HDA_MODE2         0:0:1    0:0:1(??) 0:0:1   0:0:1
 
-def create_steering_messages_camera_scc(packer, CP, CAN, enabled, lat_active, apply_steer, CS):
+def create_steering_messages_camera_scc(packer, CP, CAN, enabled, lat_active, apply_steer, CS, apply_angle, max_torque, angle_control):
 
   ret = []
-  values = CS.lfa_info
-  value_104 = 100 if not lat_active else 60 + CS.out.vEgo * 3.6
-
-  canival_mode = True
-  k8_mode = False
-  if True:
-    values = {}
-    values["LKA_MODE"] = 2
-    values["LKA_ICON"] = 2 if lat_active else 1
-    values["TORQUE_REQUEST"] = apply_steer
-    values["STEER_REQ"] = 1 if lat_active else 0
-    values["VALUE64"] = 0  # STEER_MODE, NEW_SIGNAL_2
-    values["HAS_LANE_SAFETY"] = 0
-    values["VALUE27"] = 0 # NEW_SIGNAL_1
-    
-    #values["VALUE63"] = 0
-
-    #values["VALUE104"] = 3 if lat_active else 100
-    #values["VALUE82_SET256"] = 0
-  elif canival_mode:
-    values["LKA_ICON"] = 2 if enabled else 1
-    values["TORQUE_REQUEST"] = apply_steer
-    values["STEER_REQ"] = 1 if lat_active else 0
-    values["VALUE63"] = 0
-    values["VALUE64"] = 0
-
-    values["LKA_MODE"] = 0
-    values["VALUE27"] = 0
-    values["HAS_LANE_SAFETY"] = 0
-    values["VALUE104"] = 3 if lat_active else 100
-    values["VALUE82_SET256"] = 0
-    values["NEW_SIGNAL_1"] = 0
-  elif k8_mode: # ioniq5
-    values["LKA_ICON"] = 2 if enabled else 1
-    values["TORQUE_REQUEST"] = apply_steer
-    values["STEER_REQ"] = 1 if lat_active else 0
-    values["VALUE63"] = 0
-    values["VALUE64"] = 0
-
-    values["LKA_MODE"] = 6
-    values["VALUE27"] = 3
-    values["HAS_LANE_SAFETY"] = 1
-    values["VALUE104"] = value_104
-    values["VALUE82_SET256"] = 0
-    values["NEW_SIGNAL_1"] = 0
+  if angle_control:
+    values = {
+      "LKA_MODE": 0,
+      "LKA_ICON": 2 if enabled else 1,
+      "TORQUE_REQUEST": 0,  # apply_steer,
+      "VALUE63": 0, # LKA_ASSIST
+      "STEER_REQ": 0,  # 1 if lat_active else 0,
+      "HAS_LANE_SAFETY": 0,  # hide LKAS settings
+      "LKA_ACTIVE": 3 if lat_active else 0,  # this changes sometimes, 3 seems to indicate engaged
+      "VALUE64": 0,  #STEER_MODE, NEW_SIGNAL_2
+      "LKAS_ANGLE_CMD": -apply_angle,
+      "LKAS_ANGLE_ACTIVE": 2 if lat_active else 1,
+      # a torque scale value? ramps up when steering, highest seen is 234
+      # "UNKNOWN": 50 if lat_active and not steering_pressed else 0,
+      "UNKNOWN": max_torque if lat_active else 0,
+    }
+  
   else:
-    values["LKA_ICON"] = 2 if enabled else 1
-    values["TORQUE_REQUEST"] = apply_steer
-    values["STEER_REQ"] = 1 if lat_active else 0
-    values["VALUE63"] = 0
-    values["VALUE64"] = 0
 
-    values["LKA_MODE"] = 2
-    values["VALUE27"] = 0
-    values["HAS_LANE_SAFETY"] = 0
-    values["VALUE104"] = 3 if enabled else 100
-    values["VALUE82_SET256"] = 256
-    values["NEW_SIGNAL_1"] = 0
+    values = CS.lfa_info
+    value_104 = 100 if not lat_active else 60 + CS.out.vEgo * 3.6
+  
+    canival_mode = True
+    k8_mode = False
+    if True:
+      values = {}
+      values["LKA_MODE"] = 2
+      values["LKA_ICON"] = 2 if lat_active else 1
+      values["TORQUE_REQUEST"] = apply_steer
+      values["STEER_REQ"] = 1 if lat_active else 0
+      values["VALUE64"] = 0  # STEER_MODE, NEW_SIGNAL_2
+      values["HAS_LANE_SAFETY"] = 0
+      values["LKA_ACTIVE"] = 0 # NEW_SIGNAL_1
+      
+      #values["VALUE63"] = 0
+  
+      #values["VALUE104"] = 3 if lat_active else 100
+      #values["VALUE82_SET256"] = 0
+    elif canival_mode:
+      values["LKA_ICON"] = 2 if enabled else 1
+      values["TORQUE_REQUEST"] = apply_steer
+      values["STEER_REQ"] = 1 if lat_active else 0
+      values["VALUE63"] = 0
+      values["VALUE64"] = 0
+  
+      values["LKA_MODE"] = 0
+      values["LKA_ACTIVE"] = 0
+      values["HAS_LANE_SAFETY"] = 0
+      values["VALUE104"] = 3 if lat_active else 100
+      values["VALUE82_SET256"] = 0
+      values["NEW_SIGNAL_1"] = 0
+    elif k8_mode: # ioniq5
+      values["LKA_ICON"] = 2 if enabled else 1
+      values["TORQUE_REQUEST"] = apply_steer
+      values["STEER_REQ"] = 1 if lat_active else 0
+      values["VALUE63"] = 0
+      values["VALUE64"] = 0
+  
+      values["LKA_MODE"] = 6
+      values["LKA_ACTIVE"] = 3
+      values["HAS_LANE_SAFETY"] = 1
+      values["VALUE104"] = value_104
+      values["VALUE82_SET256"] = 0
+      values["NEW_SIGNAL_1"] = 0
+    else:
+      values["LKA_ICON"] = 2 if enabled else 1
+      values["TORQUE_REQUEST"] = apply_steer
+      values["STEER_REQ"] = 1 if lat_active else 0
+      values["VALUE63"] = 0
+      values["VALUE64"] = 0
+  
+      values["LKA_MODE"] = 2
+      values["LKA_ACTIVE"] = 0
+      values["HAS_LANE_SAFETY"] = 0
+      values["VALUE104"] = 3 if enabled else 100
+      values["VALUE82_SET256"] = 256
+      values["NEW_SIGNAL_1"] = 0
 
   ret.append(packer.make_can_msg("LFA", CAN.ECAN, values))
   return ret
 
-def create_steering_messages(packer, CP, CAN, enabled, lat_active, apply_steer):
+def create_steering_messages(packer, CP, CAN, enabled, lat_active, apply_steer, apply_angle, max_torque, angle_control):
 
   ret = []
-
-  values = {
-    "LKA_MODE": 2,
-    "LKA_ICON": 2 if enabled else 1,
-    "TORQUE_REQUEST": apply_steer,
-    "VALUE104": 3 if enabled else 100,
-    "STEER_REQ": 1 if lat_active else 0,
-    #"STEER_MODE": 0,
-    "HAS_LANE_SAFETY": 0,  # hide LKAS settings
-    "VALUE63": 0,
-    "VALUE64": 0,
-  }
+  if angle_control:
+    values = {
+      "LKA_MODE": 0,
+      "LKA_ICON": 2 if enabled else 1,
+      "TORQUE_REQUEST": 0,  # apply_steer,
+      "VALUE63": 0, # LKA_ASSIST
+      "STEER_REQ": 0,  # 1 if lat_active else 0,
+      "HAS_LANE_SAFETY": 0,  # hide LKAS settings
+      "LKA_ACTIVE": 3 if lat_active else 0,  # this changes sometimes, 3 seems to indicate engaged
+      "VALUE64": 0,  #STEER_MODE, NEW_SIGNAL_2
+      "LKAS_ANGLE_CMD": -apply_angle,
+      "LKAS_ANGLE_ACTIVE": 2 if lat_active else 1,
+      # a torque scale value? ramps up when steering, highest seen is 234
+      # "UNKNOWN": 50 if lat_active and not steering_pressed else 0,
+      "UNKNOWN": max_torque if lat_active else 0,
+    }
+  else:
+    values = {
+      "LKA_MODE": 2,
+      "LKA_ICON": 2 if enabled else 1,
+      "TORQUE_REQUEST": apply_steer,
+      "VALUE104": 3 if enabled else 100,
+      "STEER_REQ": 1 if lat_active else 0,
+      #"STEER_MODE": 0,
+      "HAS_LANE_SAFETY": 0,  # hide LKAS settings
+      "VALUE63": 0,
+      "VALUE64": 0,
+    }
 
   if CP.flags & HyundaiFlags.CANFD_HDA2:
     hda2_lkas_msg = "LKAS_ALT" if CP.flags & HyundaiFlags.CANFD_HDA2_ALT_STEERING else "LKAS"
