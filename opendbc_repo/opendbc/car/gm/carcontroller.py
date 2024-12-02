@@ -140,7 +140,7 @@ class CarController(CarControllerBase):
         if (self.frame - self.last_button_frame) * DT_CTRL > 0.2:
           can_sends.append(gmcan.create_buttons(self.packer_pt, CanBus.POWERTRAIN, (CS.buttons_counter + 1) % 4, CruiseButtons.DECEL_SET))
           self.last_button_frame = self.frame
-      elif actuators.longControlState == LongCtrlState.starting:
+      elif actuators.longControlState == LongCtrlState.starting and CS.out.aEgo > 0.2:
         if (self.frame - self.last_button_frame) * DT_CTRL > 0.02:
           for _ in range(10):
             can_sends.append(gmcan.create_buttons(self.packer_pt, CanBus.POWERTRAIN, (CS.buttons_counter + 1) % 4, CruiseButtons.RES_ACCEL))
