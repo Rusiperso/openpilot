@@ -374,6 +374,20 @@ class CAR(Platforms):
     CarSpecs(mass=1355, wheelbase=2.58, steerRatio=14.3),  # mass: from https://www.hyundai-motor.com.tw/clicktobuy/custin#spec_0, steerRatio: from learner
     flags=HyundaiFlags.CAMERA_SCC | HyundaiFlags.CHECKSUM_CRC8 | HyundaiFlags.EV
   )
+  HYUNDAI_SANTAFE_MX5 = HyundaiPlatformConfig(
+    [
+      HyundaiCarDocs("HYUNDAI SANTAFE (MX5)", car_parts=CarParts.common([CarHarness.hyundai_k])),
+    ],
+    CarSpecs(mass=1910, wheelbase=2.76, steerRatio=15.8, tireStiffnessFactor=0.82),
+    flags=HyundaiFlags.ANGLE_CONTROL,
+  )
+  HYUNDAI_SANTAFE_MX5_HEV = HyundaiPlatformConfig(
+    [
+      HyundaiCarDocs("HYUNDAI SANTAFE HYBRID (MX5)", car_parts=CarParts.common([CarHarness.hyundai_k])),
+    ],
+    HYUNDAI_SANTAFE_MX5.specs,
+    flags=HyundaiFlags.ANGLE_CONTROL,
+  )
 
 
   # Kia
