@@ -119,7 +119,7 @@ class CarController(CarControllerBase):
       apply_steer = 0
       angle_max_torque = 0
     else:
-      angle_max_torque = int(clip(abs(actuators.steer) * 200. , 40, 200))
+      angle_max_torque = int(clip(abs(new_steer) , 40, 200))
 
     self.apply_angle_last = apply_angle
 
@@ -264,6 +264,7 @@ class CarController(CarControllerBase):
     new_actuators = actuators.as_builder()
     new_actuators.steer = apply_steer / self.params.STEER_MAX
     new_actuators.steerOutputCan = apply_steer
+    new_actuators.steeringAngleDeg = apply_angle
     new_actuators.accel = accel
 
     self.frame += 1

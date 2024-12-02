@@ -16,6 +16,8 @@ Ecu = structs.CarParams.Ecu
 # Cancel button can sometimes be ACC pause/resume button, main button can also enable on some cars
 ENABLE_BUTTONS = (ButtonType.accelCruise, ButtonType.decelCruise, ButtonType.cancel, ButtonType.mainCruise)
 
+SteerControlType = structs.CarParams.SteerControlType
+
 
 class CarInterface(CarInterfaceBase):
   @staticmethod
@@ -146,7 +148,10 @@ class CarInterface(CarInterfaceBase):
     ret.centerToFront = ret.wheelbase * 0.4
     ret.steerActuatorDelay = 0.1
     ret.steerLimitTimer = 0.4
-    CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+    if ret.flags & HyundaiFlags.ANGLE_CONTROL:
+      ret.steerControlType = SteerControlType.angle
+    else:
+      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 
     if ret.flags & HyundaiFlags.ALT_LIMITS:
       ret.safetyConfigs[-1].safetyParam |= Panda.FLAG_HYUNDAI_ALT_LIMITS
