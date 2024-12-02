@@ -514,7 +514,7 @@ class CAR(Platforms):
       HyundaiCarDocs("Kia Sorento Plug-in Hybrid 2022-23", "All", car_parts=CarParts.common([CarHarness.hyundai_a])),
     ],
     CarSpecs(mass=4395 * CV.LB_TO_KG, wheelbase=2.81, steerRatio=13.5),  # average of the platforms
-    flags=HyundaiFlags.RADAR_SCC,
+    flags=HyundaiFlags.RADAR_SCC | HyundaiFlags.ANGLE_CONTROL,
   )
   KIA_STINGER = HyundaiPlatformConfig(
     [HyundaiCarDocs("Kia Stinger 2018-20", video_link="https://www.youtube.com/watch?v=MJ94qoofYw0",
