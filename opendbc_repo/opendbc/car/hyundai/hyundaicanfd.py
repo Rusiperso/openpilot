@@ -666,8 +666,10 @@ def _make_ccnc_values(values, CS, lat_active, frame, hud_control,
       ('RR_DETECT', 'RR_DETECT_DISTANCE'),
     ]
     for det_key, dist_key in radar_all:
-      if values[det_key] >= 4 and values[dist_key] != 0:
-        values[det_key] = 1
+      #문제시 원복
+      #if values[det_key] >= 4 and values[dist_key] != 0:
+      #  values[det_key] = 1
+      values[det_key] = 1  # LKA off 시에도 카메라 원본값과 무관하게 항상 표시
 
     if blink_pairs:
       _apply_radar_blink(values, blink_pairs, frame, t=blink_t)
