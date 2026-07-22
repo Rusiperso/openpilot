@@ -92,9 +92,13 @@
         </div>
 
         <div class="mt-4">
-            <button class="btn btn-danger" onclick="uploadSelectedSegments()">
+            <button class="btn btn-danger" onclick="uploadSelectedSegments('upload_carrot')">
                 <i class="bi bi-upload me-2"></i>
                 Upload All Selected Routes To Carrot Server
+            </button>
+            <button class="btn btn-warning ms-2" onclick="uploadSelectedSegments('upload_g4')">
+                <i class="bi bi-upload me-2"></i>
+                Upload All Selected Routes To G4 Server
             </button>
             <div id="uploadStatus" class="mt-2"></div>
         </div>
@@ -202,7 +206,7 @@
 			}
 		}
 
-        async function uploadSelectedSegments() {
+        async function uploadSelectedSegments(target = 'upload_carrot') {
 			const video = document.getElementById('video');
 			video.pause();
             const selected = Array.from(document.querySelectorAll('.segment-checkbox:checked'))
@@ -281,7 +285,7 @@
                         formData.append('segment', segmentNum);
 
                         const xhr = new XMLHttpRequest();
-                        xhr.open('POST', `/footage/full/upload_carrot/{{ route }}/${segmentNum}`, true);
+                        xhr.open('POST', `/footage/full/${target}/{{ route }}/${segmentNum}`, true);
 
                         xhr.upload.onprogress = function(e) {
                             if (e.lengthComputable && totalSize > 0) {
