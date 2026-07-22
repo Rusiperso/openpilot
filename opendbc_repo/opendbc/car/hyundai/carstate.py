@@ -611,6 +611,19 @@ class CarState(CarStateBase):
         ret.leftBlindspot = True
       if right_block:
         ret.rightBlindspot = True
+
+    # 문제시 원복 - 옆두부 LKA토글 디버그용 임시 로그
+    if not hasattr(self, '_corner_dbg_frame'):
+      self._corner_dbg_frame = 0
+    self._corner_dbg_frame += 1
+    if self._corner_dbg_frame % 10 == 0:
+      try:
+        import time
+        with open('/data/corner_radar_debug.log', 'a') as f:
+          f.write(f"{time.time():.2f} adrv_0x1ea={dict(self.adrv_0x1ea) if self.adrv_0x1ea else None} "
+                  f"ccnc_0x162={dict(self.ccnc_0x162) if self.ccnc_0x162 else None}\n")
+      except Exception:
+        pass
         
     if self.hda_info_4a3 is not None:
       speedLimit = self.hda_info_4a3["SPEED_LIMIT"]
