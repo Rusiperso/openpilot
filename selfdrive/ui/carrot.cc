@@ -594,6 +594,8 @@ private:
     int    softHoldActive = 0;
     int    carrotCruise = 0;
     bool    longActive = false;
+    bool    evModeActive = false;  // #문제시 원복
+    bool    evModeValid = false;   // #문제시 원복
 
     float   t_follow = 0.0;
     float   tf_distance = 0.0;
@@ -616,6 +618,8 @@ protected:
         brakeHoldActive = sm["carState"].getCarState().getBrakeHoldActive();
         softHoldActive = sm["carState"].getCarState().getSoftHoldActive();
         carrotCruise = sm["carState"].getCarState().getCarrotCruise();
+        evModeActive = sm["carState"].getCarState().getEvModeActive();  // #문제시 원복
+        evModeValid = sm["carState"].getCarState().getEvModeValid();    // #문제시 원복
         auto selfdrive_state = sm["selfdriveState"].getSelfdriveState();
         longActive = selfdrive_state.getEnabled();
         //longActive = sm["carControl"].getCarControl().getLongActive();
@@ -2351,6 +2355,11 @@ public:
         sprintf(speed, "%.0f", (s->scene.is_metric)? v_ego * MS_TO_KPH : v_ego * MS_TO_MPH);
         ui_draw_text(s, bx, by + 50, speed, 120, COLOR_WHITE, BOLD, 3.0f, 8.0f);
         ui_draw_image(s, { bx - 100, by - 60, 350, 150 }, "ic_speed_bg", 1.0f);
+
+        // draw EV indicator between current speed and set speed (#문제시 원복)
+        if (evModeActive && evModeValid) {
+          ui_draw_text(s, bx + 85, by - 20, "EV", 40, COLOR_GREEN, BOLD);
+        }
 
         // draw cruise speed
         char cruise_speed[32];
