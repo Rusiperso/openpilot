@@ -147,6 +147,7 @@ class HyundaiExtFlags(IntFlag):
   RADAR_GROUP1 = 2 ** 7  # 0x210 radar group 1, 0x3A5 radar group 2
   CANFD_GEARS_69 = 2 ** 10
   EV_MODE_STATUS_230 = 2 ** 11  # ECAN 0x230/DLC32 exposes the hybrid power-flow mode used for the EV indicator
+  RADAR_GROUP3 = 2 ** 12  # 0x400-0x41D radar object group
 
 class Footnote(Enum):
   CANFD = CarFootnote(
