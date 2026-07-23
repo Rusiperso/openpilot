@@ -1970,6 +1970,8 @@ public:
     QString apply_source = "";
     bool    latActive = false;
     bool    longActive = false;
+    bool    evModeActive = false;
+    bool    evModeValid = false;
     int     xState = 0;
     int     trafficState = 0;
     int     trafficState_carrot = 0;
@@ -2012,6 +2014,8 @@ public:
         auto selfdrive_state = sm["selfdriveState"].getSelfdriveState();
         longActive = selfdrive_state.getEnabled();
         latActive = car_control.getLatActive();
+        evModeActive = car_state.getEvModeActive();
+        evModeValid = car_state.getEvModeValid();
 
         v_cruise = car_state.getVCruiseCluster();
         v_ego = car_state.getVEgoCluster();
