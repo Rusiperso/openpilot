@@ -146,6 +146,7 @@ class HyundaiExtFlags(IntFlag):
   CANFD_GEARS_NONE = 2 ** 6
   RADAR_GROUP1 = 2 ** 7  # 0x210 radar group 1, 0x3A5 radar group 2
   CANFD_GEARS_69 = 2 ** 10
+  EV_MODE_STATUS_230 = 2 ** 11  # ECAN 0x230/DLC32 exposes the hybrid power-flow mode used for the EV indicator
 
 class Footnote(Enum):
   CANFD = CarFootnote(
@@ -1008,6 +1009,15 @@ CAN_GEARS = {
 
 CANFD_CAR = CAR.with_flags(HyundaiFlags.CANFD)
 CANFD_RADAR_SCC_CAR = CAR.with_flags(HyundaiFlags.RADAR_SCC)  # TODO: merge with UNSUPPORTED_LONGITUDINAL_CAR
+
+CANFD_HYBRID_STATUS_ADDR = 0xFA
+CANFD_HYBRID_STATUS_DLC = 32
+
+EV_MODE_STATUS_ADDR = 0x230
+EV_MODE_STATUS_DLC = 32
+EV_MODE_STATUS_MSG = "HCU_STATUS_230"
+EV_MODE_STATUS_SIGNAL = "HYBRID_POWER_FLOW_MODE"
+EV_MODE_ACTIVE_VALUES = frozenset((1, 2, 6))
 
 CANFD_UNSUPPORTED_LONGITUDINAL_CAR = CAR.with_flags(HyundaiFlags.CANFD_NO_RADAR_DISABLE)  # TODO: merge with UNSUPPORTED_LONGITUDINAL_CAR
 

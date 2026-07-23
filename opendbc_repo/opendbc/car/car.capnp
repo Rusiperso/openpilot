@@ -256,6 +256,9 @@ struct CarState {
   rightLaneLine @75 : Int16; # -1: no lane, 0: dashed, 1: solid, +10: white, +20: yellow, ex) 21: solid yellow
   datetime @76 :UInt64; # timestamp in milliseconds since epoch
 
+  evModeActive @77 :Bool; # decoded hybrid power-flow mode calls for the EV indicator
+  evModeValid @78 :Bool;  # evModeActive is backed by a fresh, checksum-valid CAN frame of the expected bus and length
+
   struct Tpms {
     fl @0 :Float32;
     fr @1 :Float32;

@@ -8,7 +8,8 @@ from opendbc.can import CANDefine, CANParser
 from opendbc.car import Bus, create_button_events, structs, DT_CTRL
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.hyundai.hyundaicanfd import CanBus
-from opendbc.car.hyundai.values import HyundaiFlags, CAR, DBC, Buttons, CarControllerParams, CAMERA_SCC_CAR, HyundaiExtFlags
+from opendbc.car.hyundai.values import HyundaiFlags, CAR, DBC, Buttons, CarControllerParams, CAMERA_SCC_CAR, HyundaiExtFlags, \
+                                        EV_MODE_ACTIVE_VALUES, EV_MODE_STATUS_ADDR, EV_MODE_STATUS_MSG, EV_MODE_STATUS_SIGNAL
 from opendbc.car.interfaces import CarStateBase
 
 from openpilot.common.params import Params
@@ -27,6 +28,17 @@ BUTTONS_DICT = {Buttons.RES_ACCEL: ButtonType.accelCruise, Buttons.SET_DECEL: Bu
                 Buttons.GAP_DIST: ButtonType.gapAdjustCruise, Buttons.CANCEL: ButtonType.cancel, Buttons.LFA_BUTTON: ButtonType.lfaButton}
 
 GearShifter = structs.CarState.GearShifter
+
+
+def _get_ev_mode_state(cp) -> tuple[bool, bool]:
+  # Display-only: relies on CANParser's existing checksum validation dropping corrupt frames from vl.
+  # #문제시 원복
+  if EV_MODE_STATUS_MSG not in cp.vl or not cp.vl[EV_MODE_STATUS_MSG]:
+    return False, False
+  valid = not cp.bus_timeout
+  mode = int(cp.vl[EV_MODE_STATUS_MSG][EV_MODE_STATUS_SIGNAL])
+  active = valid and mode in EV_MODE_ACTIVE_VALUES
+  return active, valid
 
 
 NUMERIC_TO_TZ = {
@@ -480,6 +492,9 @@ class CarState(CarStateBase):
 
     ret = structs.CarState()
 
+    if self.CP.extFlags & HyundaiExtFlags.EV_MODE_STATUS_230:
+      ret.evModeActive, ret.evModeValid = _get_ev_mode_state(cp)  # #문제시 원복
+
     self.is_metric = cp.vl["CRUISE_BUTTONS_ALT"]["DISTANCE_UNIT"] != 1
     speed_factor = CV.KPH_TO_MS if self.is_metric else CV.MPH_TO_MS
 
@@ -742,6 +757,11 @@ class CarState(CarStateBase):
       # TODO: this can be removed once we add dynamic support to vl_all
       msgs += [
         ("CRUISE_BUTTONS", 50)
+      ]
+    if CP.extFlags & HyundaiExtFlags.EV_MODE_STATUS_230:
+      # #문제시 원복 - display-only EV indicator, observed at 10Hz on ECAN
+      msgs += [
+        (EV_MODE_STATUS_MSG, 10)
       ]
     return {
       Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], msgs, CanBus(CP).ECAN),
