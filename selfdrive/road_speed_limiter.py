@@ -40,6 +40,14 @@ class RoadLimitSpeedServer:
 
     self.remote_gps_addr = None
     self.last_time_location = 0
+
+    # 폰(TmapNda) 진단용: GPS 역전송 패킷에 같이 실어 보낼 디버그 값들.
+    # main() 루프에서 dat.roadLimitSpeed를 구성한 직후 갱신됨. #문제시 원복
+    self.dbg_cam_type = 0
+    self.dbg_cam_limit_speed = 0
+    self.dbg_cam_limit_speed_left_dist = 0
+    self.dbg_road_limit_speed = 0
+    self.dbg_raw_sdi_type = 0
     
     if int(Params().get("AutoNaviSpeedCtrl")) != 3:
       Port.BROADCAST_PORT = 7708
@@ -86,20 +94,30 @@ class RoadLimitSpeedServer:
           location = self.gps_sm['gpsLocationExternal']
 
           if location.accuracy < 10.:
-            json_location = json.dumps({"location": [
-              location.latitude,
-              location.longitude,
-              location.altitude,
-              location.speed,
-              location.bearingDeg,
-              location.accuracy,
-              location.timestamp,
-              # location.source,
-              # location.vNED,
-              location.verticalAccuracy,
-              location.bearingAccuracyDeg,
-              location.speedAccuracy,
-            ]})
+            json_location = json.dumps({
+              "location": [
+                location.latitude,
+                location.longitude,
+                location.altitude,
+                location.speed,
+                location.bearingDeg,
+                location.accuracy,
+                location.timestamp,
+                # location.source,
+                # location.vNED,
+                location.verticalAccuracy,
+                location.bearingAccuracyDeg,
+                location.speedAccuracy,
+              ],
+              # 재억 진단용 추가 필드: 폰(TmapNda)이 그대로 받아 로그로 남김. #문제시 원복
+              "debug": {
+                "cam_type": self.dbg_cam_type,
+                "raw_sdi_type": self.dbg_raw_sdi_type,
+                "cam_limit_speed": self.dbg_cam_limit_speed,
+                "cam_limit_speed_left_dist": self.dbg_cam_limit_speed_left_dist,
+                "road_limit_speed": self.dbg_road_limit_speed,
+              },
+            })
 
             address = (self.remote_gps_addr[0], Port.LOCATION_PORT)
             self.gps_socket.sendto(json_location.encode(), address)
@@ -597,6 +615,14 @@ def main():
         dat.roadLimitSpeed.xCmd = "" if xCmd is None else xCmd
         dat.roadLimitSpeed.xArg = "" if xArg is None else xArg
         dat.roadLimitSpeed.xIndex = xIndex
+
+        # 폰(TmapNda) 진단용: 이번 프레임 값들을 server에 저장해뒀다가
+        # gps_timer()에서 GPS 역전송 패킷에 같이 실어 보냄. #문제시 원복
+        server.dbg_cam_type = dat.roadLimitSpeed.camType
+        server.dbg_cam_limit_speed = dat.roadLimitSpeed.camLimitSpeed
+        server.dbg_cam_limit_speed_left_dist = dat.roadLimitSpeed.camLimitSpeedLeftDist
+        server.dbg_road_limit_speed = dat.roadLimitSpeed.roadLimitSpeed
+        server.dbg_raw_sdi_type = int(nSdiType) if 'nSdiType' in dir() else 0
 
         roadLimitSpeed.send(dat.to_bytes())
         if now - send_time > 1.0:
