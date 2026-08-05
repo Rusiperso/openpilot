@@ -1034,7 +1034,8 @@ protected:
             char str[128] = "";
             sprintf(str, "%s", szTBTMainText.toStdString().c_str());
             float text_scale = (scale>0.5)?scale:0.5;
-            ui_draw_text(s, img_x + size_x / 2, img_y + size_y + 100 * text_scale, str, 100 * text_scale, COLOR_WHITE, BOLD);
+            //ui_draw_text(s, img_x + size_x / 2, img_y + size_y + 100 * text_scale, str, 100 * text_scale, COLOR_WHITE, BOLD);
+            // 핀 옆 라벨 중복 표시 제거 - 우측 하단 박스 제목에 이미 같은 텍스트가 표시됨. #문제시 원복
         }
         else navi_turn_point_flag = true;
     }
