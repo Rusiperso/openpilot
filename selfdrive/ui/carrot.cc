@@ -1165,8 +1165,9 @@ protected:
             case 3: ui_draw_image(s, { bx - icon_size / 2, by - icon_size / 2, icon_size, icon_size }, "ic_lane_change_l", 1.0f); break;
             case 4: ui_draw_image(s, { bx - icon_size / 2, by - icon_size / 2, icon_size, icon_size }, "ic_lane_change_r", 1.0f); break;
             case 7: ui_draw_image(s, { bx - icon_size / 2, by - icon_size / 2, icon_size, icon_size }, "ic_turn_u", 1.0f); break;
-            case 6: ui_draw_text(s, bx, by + 20, "TG", 35, COLOR_WHITE, BOLD); break;
-            case 8: ui_draw_text(s, bx, by + 20, "목적지", 35, COLOR_WHITE, BOLD); break;
+            case 5: ui_draw_image(s, { bx - icon_size / 2, by - icon_size / 2, icon_size, icon_size }, "ic_rotary", 1.0f); break;
+            case 6: ui_draw_image(s, { bx - icon_size / 2, by - icon_size / 2, icon_size, icon_size }, "ic_tollgate", 1.0f); break;
+            case 8: ui_draw_image(s, { bx - icon_size / 2, by - icon_size / 2, icon_size, icon_size }, "ic_destination", 1.0f); break;
             default:
                 sprintf(str, "감속:%d", xTurnInfo);
                 ui_draw_text(s, bx, by + 20, str, 35, COLOR_WHITE, BOLD);
@@ -1183,7 +1184,21 @@ protected:
             ui_draw_text(s, bx, by + 120, str, 40, COLOR_WHITE, BOLD);
         }
         nvgTextAlign(s->vg, NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM);
-        if (szSdiDescr.length() > 0) {
+        if (xSignType == 22 && xSpdDist > 0) {
+            // v: 사용자 요청(2026-08-08) - 방지턱은 텍스트 라벨 대신 아이콘 + 거리로 표시.
+            // 카메라(그 외 xSignType)는 아직 전용 아이콘 미정이라 기존 텍스트 라벨 유지. #문제시 원복
+            int icon_w = 60, icon_h = 75;
+            ui_draw_image(s, { tbt_x + 200, tbt_y + 200 - icon_h, icon_w, icon_h }, "ic_speed_bump", 1.0f);
+            if (s->scene.is_metric) {
+              if (xSpdDist < 1000) sprintf(str, "%d m", xSpdDist);
+              else sprintf(str, "%.1f km", xSpdDist / 1000.f);
+            } else {
+              if (xSpdDist < 1609) sprintf(str, "%d ft", (int)(xSpdDist * 3.28084));
+              else sprintf(str, "%.1f mi", xSpdDist / 1609.344f);
+            }
+            ui_draw_text(s, tbt_x + 200 + icon_w + 15, tbt_y + 200, str, 40, COLOR_YELLOW, BOLD);
+        }
+        else if (szSdiDescr.length() > 0) {
             float bounds[4];  // [xmin, ymin, xmax, ymax]를 저장하는 배열
             nvgFontSize(s->vg, 40);
             nvgTextBounds(s->vg, tbt_x + 200, tbt_y + 200, szSdiDescr.toStdString().c_str(), NULL, bounds);
@@ -3420,6 +3435,9 @@ void ui_nvg_init(UIState *s) {
   {"ic_tire", "../assets/images/img_tire.png"},
   {"ic_road_speed", "../assets/images/road_speed.png"},
   {"ic_speed_bump", "../assets/images/speed_bump.png"},
+  {"ic_rotary", "../assets/images/rotary.png"},
+  {"ic_tollgate", "../assets/images/tollgate.png"},
+  {"ic_destination", "../assets/images/destination.png"},
   {"ic_nda", "../assets/images/img_nda.png"},
   {"ic_navi","../assets/images/img_navi.png"},
   {"ic_scc2", "../assets/images/img_scc2.png"},
