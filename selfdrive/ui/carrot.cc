@@ -1184,11 +1184,12 @@ protected:
             ui_draw_text(s, bx, by + 120, str, 40, COLOR_WHITE, BOLD);
         }
         nvgTextAlign(s->vg, NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM);
-        if (xSignType == 22 && xSpdDist > 0) {
-            // v: 사용자 요청(2026-08-08) - 방지턱은 텍스트 라벨 대신 아이콘 + 거리로 표시.
-            // 카메라(그 외 xSignType)는 아직 전용 아이콘 미정이라 기존 텍스트 라벨 유지. #문제시 원복
+        if (xSignType > 0 && xSpdDist > 0) {
+            // v: 사용자 요청(2026-08-08) - 방지턱/카메라 텍스트 라벨 대신 아이콘 + 거리로 표시.
+            // 방지턱(22)은 방지턱 아이콘, 그 외 카메라/구간단속류는 공용 카메라 아이콘. #문제시 원복
+            const char* icon_name = (xSignType == 22) ? "ic_speed_bump" : "ic_camera";
             int icon_w = 60, icon_h = 75;
-            ui_draw_image(s, { tbt_x + 200, tbt_y + 200 - icon_h, icon_w, icon_h }, "ic_speed_bump", 1.0f);
+            ui_draw_image(s, { tbt_x + 200, tbt_y + 200 - icon_h, icon_w, icon_h }, icon_name, 1.0f);
             if (s->scene.is_metric) {
               if (xSpdDist < 1000) sprintf(str, "%d m", xSpdDist);
               else sprintf(str, "%.1f km", xSpdDist / 1000.f);
@@ -3438,6 +3439,7 @@ void ui_nvg_init(UIState *s) {
   {"ic_rotary", "../assets/images/rotary.png"},
   {"ic_tollgate", "../assets/images/tollgate.png"},
   {"ic_destination", "../assets/images/destination.png"},
+  {"ic_camera", "../assets/images/camera.png"},
   {"ic_nda", "../assets/images/img_nda.png"},
   {"ic_navi","../assets/images/img_navi.png"},
   {"ic_scc2", "../assets/images/img_scc2.png"},
