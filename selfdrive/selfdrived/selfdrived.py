@@ -112,6 +112,7 @@ class SelfdriveD:
     self.initialized = False
     self.enabled = False
     self.active = False
+    self.cutin_audio_active = False  #문제시 원복 (코너레이더 끼어들기 감지 알림음)
     self.mismatch_counter = 0
     self.cruise_mismatch_counter = 0
     self.last_steering_pressed_frame = 0
@@ -206,6 +207,12 @@ class SelfdriveD:
 
       if CS.latEnabled != self.CS_prev.latEnabled:
         self.events.add(EventName.audioPrompt)
+
+    #문제시 원복 (코너레이더 끼어들기 감지시 알림음 "띠링")
+    cutin_active = self.enabled and self.sm.valid['radarState'] and len(self.sm['radarState'].leadsCutIn) > 0
+    if cutin_active and not self.cutin_audio_active:
+      self.events.add(EventName.audioPrompt)
+    self.cutin_audio_active = cutin_active
 
     # Create events for temperature, disk space, and memory
     if self.sm['deviceState'].thermalStatus >= ThermalStatus.red:
