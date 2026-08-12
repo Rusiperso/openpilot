@@ -755,7 +755,9 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         values["TARGET"] = 1 if main_enabled else 0
         values["TARGET_DISTANCE"] = int(hud_control.leadDistance)
 
-        values["BACKGROUND"] = 6 if CS.paddle_button_prev > 0 else 1 if cruise_enabled else 3 if lat_active else 7
+        #문제시 원복
+        #values["BACKGROUND"] = 6 if CS.paddle_button_prev > 0 else 1 if cruise_enabled else 3 if lat_active else 7
+        values["BACKGROUND"] = 6 if CS.paddle_button_prev > 0 else 1 if cruise_enabled else 3  # 크루즈+조향 모두 off라도 옆두부(코너레이더) 표시 유지
         #문제시 원복
         #values["CENTERLINE"] = 1 if HDA_CntrlModSta > 0 else 0
         values["CENTERLINE"] = 1  # LKA off로 실차 HDA_CntrlModSta가 0이 되어도 차량 블록 아이콘 유지
