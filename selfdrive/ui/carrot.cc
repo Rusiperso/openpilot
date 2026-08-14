@@ -1166,7 +1166,12 @@ protected:
             case 4: ui_draw_image(s, { bx - icon_size / 2, by - icon_size / 2, icon_size, icon_size }, "ic_lane_change_r", 1.0f); break;
             case 7: ui_draw_image(s, { bx - icon_size / 2, by - icon_size / 2, icon_size, icon_size }, "ic_turn_u", 1.0f); break;
             case 5: ui_draw_image(s, { bx - icon_size / 2, by - icon_size / 2, icon_size, icon_size }, "ic_rotary", 1.0f); break;
-            case 6: ui_draw_image(s, { bx - icon_size / 2, by - icon_size / 2, icon_size, icon_size }, "ic_tollgate", 1.0f); break;
+            case 6:
+                // v: 재억 요청 - 톨게이트(TG) 아이콘이 박스를 넘어가서 위 텍스트를 가림.
+                // 다른 아이콘들과 그림 크기(256x256)는 같은데 유독 이것만 커보인다고 해서,
+                // 이 아이콘만 별도로 작게(70%) 줄임. #문제시 원복
+                ui_draw_image(s, { bx - (int)(icon_size * 0.35), by - (int)(icon_size * 0.35), (int)(icon_size * 0.7), (int)(icon_size * 0.7) }, "ic_tollgate", 1.0f);
+                break;
             case 8: ui_draw_image(s, { bx - icon_size / 2, by - icon_size / 2, icon_size, icon_size }, "ic_destination", 1.0f); break;
             default:
                 sprintf(str, "감속:%d", xTurnInfo);
