@@ -631,7 +631,9 @@ class RadarD:
       # left/right
       elif y_rel_neg < 0: #left_lane_y:
         ld = c.get_RadarState(0, 0)
-        if self.lane_line_available and c.in_lane_prob_future > 0.1 and c.cnt > int(2.0/DT_MDL):
+        #문제시 원복 (끼어들기 방향 판별: yRel과 yvLead 부호가 반대면 "내 차선 쪽으로 다가오는 중", 같으면 "멀어지는 중"=끼어들기 아님)
+        approaching = (c.yRel * c.yvLead) < -0.05
+        if self.lane_line_available and c.in_lane_prob_future > 0.05 and c.cnt > int(2.0/DT_MDL) and approaching:
           if c.cut_in_count > int(0.1/DT_MDL):
             ld['modelProb'] = 0.03
             cutin_list.append(ld)
@@ -639,7 +641,9 @@ class RadarD:
         left_list.append(ld)
       else:
         ld = c.get_RadarState(0, 0)
-        if self.lane_line_available and c.in_lane_prob_future > 0.1 and c.cnt > int(2.0/DT_MDL):
+        #문제시 원복 (끼어들기 방향 판별: yRel과 yvLead 부호가 반대면 "내 차선 쪽으로 다가오는 중", 같으면 "멀어지는 중"=끼어들기 아님)
+        approaching = (c.yRel * c.yvLead) < -0.05
+        if self.lane_line_available and c.in_lane_prob_future > 0.05 and c.cnt > int(2.0/DT_MDL) and approaching:
           if c.cut_in_count > int(0.1/DT_MDL):
             ld['modelProb'] = 0.03
             cutin_list.append(ld)
