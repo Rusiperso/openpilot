@@ -2382,10 +2382,9 @@ public:
         ui_draw_text(s, bx, by + 50, speed, 120, COLOR_WHITE, BOLD, 3.0f, 8.0f);
         ui_draw_image(s, { bx - 100, by - 60, 350, 150 }, "ic_speed_bg", 1.0f);
 
-        // draw EV indicator in the blank gap between CPU/MEM/DISK box bottom and the speed number
-        // (직전 위치는 속도 숫자 바로 위 구석이라 테두리에 끼어 답답했음 -> 박스 밑, 숫자 사이 빈 공간으로 이동)
+        // draw EV indicator to the right of the green status dot (동그라미 안 겹치게 오른쪽으로 이동)
         if (evModeActive && evModeValid) {
-          ui_draw_text(s, bx + 40, by - 90, "EV", 28, COLOR_GREEN, BOLD);
+          ui_draw_text(s, bx + 130, by - 85, "EV", 28, COLOR_GREEN, BOLD);
         }
 
         // draw cruise speed
