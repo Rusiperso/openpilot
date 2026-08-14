@@ -648,10 +648,13 @@ class RadarD:
 
       c.cut_in_count = max(c.cut_in_count - 1, 0)
 
+    #문제시 원복 (끼어들기 알림음 오작동 방지: 거리 3~50m, 상대속도 4m/s 이상 조건으로 실제 위험한 끼어들기만 걸러냄)
+    filtered_cutin_list = [ld for ld in cutin_list if 3 < ld['dRel'] < 50 and ld['vLead'] > 4]
+
     self.radar_state.leadsLeft   = left_list
     self.radar_state.leadsRight  = right_list
     self.radar_state.leadsCenter = center_list
-    self.radar_state.leadsCutIn = cutin_list
+    self.radar_state.leadsCutIn = filtered_cutin_list
     self.leadCutIn = min(
       (ld for ld in cutin_list if 3 < ld['dRel'] < 50 and ld['vLead'] > 4),
       key=lambda d: d['dRel'],
