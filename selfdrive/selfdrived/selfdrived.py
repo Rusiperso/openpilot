@@ -208,11 +208,7 @@ class SelfdriveD:
       if CS.latEnabled != self.CS_prev.latEnabled:
         self.events.add(EventName.audioPrompt)
 
-    #문제시 원복 (코너레이더 끼어들기 감지시 알림음 "띠링")
-    cutin_active = self.enabled and self.sm.valid['radarState'] and len(self.sm['radarState'].leadsCutIn) > 0
-    if cutin_active and not self.cutin_audio_active:
-      self.events.add(EventName.audioPrompt)
-    self.cutin_audio_active = cutin_active
+    # 끼어들기 알림음 비활성화 (2026-08-14 재억 요청으로 꺼둠, 옆두부 화면 표시는 그대로 유지됨)
 
     # Create events for temperature, disk space, and memory
     if self.sm['deviceState'].thermalStatus >= ThermalStatus.red:
