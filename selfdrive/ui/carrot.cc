@@ -2382,13 +2382,10 @@ public:
         ui_draw_text(s, bx, by + 50, speed, 120, COLOR_WHITE, BOLD, 3.0f, 8.0f);
         ui_draw_image(s, { bx - 100, by - 60, 350, 150 }, "ic_speed_bg", 1.0f);
 
-        // draw EV indicator between current speed and set speed (#문제시 원복)
-        // ajouatom cluster_renderer.py 기준 위치/크기 비율 맞춤:
-        // SPEED_EV_CENTER_X=181 (speed_center=85.2, cruise_center=249.2 사이 ~58% 지점)
-        // SPEED_EV_CENTER_Y=SPEED_VALUE_CENTER_Y (현재속도와 동일 높이)
-        // SPEED_EV_FONT_SIZE=28 (현재속도 폰트의 약 31%)
+        // draw EV indicator above current speed, below traffic light icon (신호등 아이콘과 속도 숫자 사이 빈 공간)
+        // 기존에는 bx+95 위치라 크루즈 속도/과속 표지판과 겹쳤음 -> 속도 숫자 왼쪽 위 빈 자리로 이동
         if (evModeActive && evModeValid) {
-          ui_draw_text(s, bx + 95, by + 6, "EV", 36, COLOR_GREEN, BOLD);
+          ui_draw_text(s, bx, by - 40, "EV", 28, COLOR_GREEN, BOLD);
         }
 
         // draw cruise speed
