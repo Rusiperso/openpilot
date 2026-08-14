@@ -2384,7 +2384,7 @@ public:
 
         // draw EV indicator to the right of the green status dot (동그라미 안 겹치게 오른쪽으로 이동)
         if (evModeActive && evModeValid) {
-          ui_draw_text(s, bx + 130, by - 85, "EV", 34, COLOR_GREEN, BOLD);
+          ui_draw_text(s, bx + 130, by - 85, "EV", 50, COLOR_GREEN, BOLD);
         }
 
         // draw cruise speed
