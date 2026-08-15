@@ -1133,56 +1133,49 @@ protected:
         //if (xDistToTurn <= 0 || nGoPosDist <= 0) return;
         char str[128] = "";
 
-        // v9.4: 재억 요청 - 목적지 정보 카드(도착 시간/거리 박스)가 화면에서 너무
-        // 크게 보여서 살짝 줄임. 박스/아이콘/글자를 전부 같은 비율(85%)로 줄이면서
-        // 위치 기준점(tbt_x, tbt_y)은 그대로 둬서 카드가 오른쪽 아래 구석에서
-        // 안쪽으로만 작아지도록 함. #문제시 원복
-        const float sc = 0.85f;
-        int icon_size_s = (int)(icon_size * sc);
-
         int tbt_x = s->fb_w - 800;
         int tbt_y = s->fb_h - 250;
         NVGcolor stroke_color = COLOR_WHITE;
         if (s->scene._current_carrot_display == 3) {
-          ui_fill_rect(s->vg, { tbt_x, 5, (int)(790 * sc), s->fb_h - 15 }, COLOR_BLACK_ALPHA(120), 30, 2, &stroke_color);
+          ui_fill_rect(s->vg, { tbt_x, 5, 790, s->fb_h - 15 }, COLOR_BLACK_ALPHA(120), 30, 2, &stroke_color);
         }
         if (nGoPosDist > 0 && nGoPosTime > 0);
         else return -1;
         if (s->scene._current_carrot_display == 3);
         else {
-          ui_fill_rect(s->vg, { tbt_x, tbt_y - (int)(60 * sc), (int)(790 * sc), (int)(300 * sc) }, COLOR_BLACK_ALPHA(120), 30, 2, &stroke_color);
+          ui_fill_rect(s->vg, { tbt_x, tbt_y - 60, 790, 240 + 60 }, COLOR_BLACK_ALPHA(120), 30, 2, &stroke_color);
         }
         if (szTBTMainText.length() > 0) {
           nvgTextAlign(s->vg, NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM);
-          ui_draw_text(s, tbt_x + (int)(20 * sc), tbt_y - (int)(15 * sc), szTBTMainText.toStdString().c_str(), (int)(40 * sc), COLOR_WHITE, BOLD);
+          ui_draw_text(s, tbt_x + 20, tbt_y - 15, szTBTMainText.toStdString().c_str(), 40, COLOR_WHITE, BOLD);
           //ui_draw_text(s, tbt_x + 190, tbt_y - 5, szPosRoadName.toStdString().c_str(), 40, COLOR_WHITE, BOLD);
         }
 
         if(xTurnInfo > 0) {
             nvgTextAlign(s->vg, NVG_ALIGN_CENTER | NVG_ALIGN_BOTTOM);
-            int bx = tbt_x + (int)(100 * sc);
-            int by = tbt_y + (int)(85 * sc);
+            int bx = tbt_x + 100;
+            int by = tbt_y + 85;
             if (atc_type.length() > 0) {
               stroke_color = COLOR_BLACK;
-              ui_fill_rect(s->vg, { bx - (int)(80 * sc), by - (int)(90 * sc), (int)(160 * sc), (int)(230 * sc) }, atc_type.contains("prepare")?COLOR_GREEN_ALPHA(100) : COLOR_GREEN, 15, 1.0f, &stroke_color);
+              ui_fill_rect(s->vg, { bx - 80, by - 90, 160, 230 }, atc_type.contains("prepare")?COLOR_GREEN_ALPHA(100) : COLOR_GREEN, 15, 1.0f, &stroke_color);
             }
             switch (xTurnInfo) {
-            case 1: ui_draw_image(s, { bx - icon_size_s / 2, by - icon_size_s / 2, icon_size_s, icon_size_s }, "ic_turn_l", 1.0f); break;
-            case 2: ui_draw_image(s, { bx - icon_size_s / 2, by - icon_size_s / 2, icon_size_s, icon_size_s }, "ic_turn_r", 1.0f); break;
-            case 3: ui_draw_image(s, { bx - icon_size_s / 2, by - icon_size_s / 2, icon_size_s, icon_size_s }, "ic_lane_change_l", 1.0f); break;
-            case 4: ui_draw_image(s, { bx - icon_size_s / 2, by - icon_size_s / 2, icon_size_s, icon_size_s }, "ic_lane_change_r", 1.0f); break;
-            case 7: ui_draw_image(s, { bx - icon_size_s / 2, by - icon_size_s / 2, icon_size_s, icon_size_s }, "ic_turn_u", 1.0f); break;
-            case 5: ui_draw_image(s, { bx - icon_size_s / 2, by - icon_size_s / 2, icon_size_s, icon_size_s }, "ic_rotary", 1.0f); break;
+            case 1: ui_draw_image(s, { bx - icon_size / 2, by - icon_size / 2, icon_size, icon_size }, "ic_turn_l", 1.0f); break;
+            case 2: ui_draw_image(s, { bx - icon_size / 2, by - icon_size / 2, icon_size, icon_size }, "ic_turn_r", 1.0f); break;
+            case 3: ui_draw_image(s, { bx - icon_size / 2, by - icon_size / 2, icon_size, icon_size }, "ic_lane_change_l", 1.0f); break;
+            case 4: ui_draw_image(s, { bx - icon_size / 2, by - icon_size / 2, icon_size, icon_size }, "ic_lane_change_r", 1.0f); break;
+            case 7: ui_draw_image(s, { bx - icon_size / 2, by - icon_size / 2, icon_size, icon_size }, "ic_turn_u", 1.0f); break;
+            case 5: ui_draw_image(s, { bx - icon_size / 2, by - icon_size / 2, icon_size, icon_size }, "ic_rotary", 1.0f); break;
             case 6:
                 // v: 재억 요청 - 톨게이트(TG) 아이콘이 박스를 넘어가서 위 텍스트를 가림.
                 // 다른 아이콘들과 그림 크기(256x256)는 같은데 유독 이것만 커보인다고 해서,
                 // 이 아이콘만 별도로 작게(70%) 줄임. #문제시 원복
-                ui_draw_image(s, { bx - (int)(icon_size_s * 0.35), by - (int)(icon_size_s * 0.35), (int)(icon_size_s * 0.7), (int)(icon_size_s * 0.7) }, "ic_tollgate", 1.0f);
+                ui_draw_image(s, { bx - (int)(icon_size * 0.35), by - (int)(icon_size * 0.35), (int)(icon_size * 0.7), (int)(icon_size * 0.7) }, "ic_tollgate", 1.0f);
                 break;
-            case 8: ui_draw_image(s, { bx - icon_size_s / 2, by - icon_size_s / 2, icon_size_s, icon_size_s }, "ic_destination", 1.0f); break;
+            case 8: ui_draw_image(s, { bx - icon_size / 2, by - icon_size / 2, icon_size, icon_size }, "ic_destination", 1.0f); break;
             default:
                 sprintf(str, "감속:%d", xTurnInfo);
-                ui_draw_text(s, bx, by + (int)(20 * sc), str, (int)(35 * sc), COLOR_WHITE, BOLD);
+                ui_draw_text(s, bx, by + 20, str, 35, COLOR_WHITE, BOLD);
                 break;
             }
             if (s->scene.is_metric) {
@@ -1193,15 +1186,15 @@ protected:
               if (xDistToTurn < 1609) sprintf(str, "%d ft", (int)(xDistToTurn * 3.28084));
               else sprintf(str, "%.1f mi", xDistToTurn / 1609.344f);
             }
-            ui_draw_text(s, bx, by + (int)(120 * sc), str, (int)(40 * sc), COLOR_WHITE, BOLD);
+            ui_draw_text(s, bx, by + 120, str, 40, COLOR_WHITE, BOLD);
         }
         nvgTextAlign(s->vg, NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM);
         if (xSignType > 0 && xSpdDist > 0) {
             // v: 사용자 요청(2026-08-08) - 방지턱/카메라 텍스트 라벨 대신 아이콘 + 거리로 표시.
             // 방지턱(22)은 방지턱 아이콘, 그 외 카메라/구간단속류는 공용 카메라 아이콘. #문제시 원복
             const char* icon_name = (xSignType == 22) ? "ic_speed_bump" : "ic_camera";
-            int icon_w = (int)(60 * sc), icon_h = (int)(75 * sc);
-            ui_draw_image(s, { tbt_x + (int)(200 * sc), tbt_y + (int)(200 * sc) - icon_h, icon_w, icon_h }, icon_name, 1.0f);
+            int icon_w = 60, icon_h = 75;
+            ui_draw_image(s, { tbt_x + 200, tbt_y + 200 - icon_h, icon_w, icon_h }, icon_name, 1.0f);
             if (s->scene.is_metric) {
               if (xSpdDist < 1000) sprintf(str, "%d m", xSpdDist);
               else sprintf(str, "%.1f km", xSpdDist / 1000.f);
@@ -1209,19 +1202,19 @@ protected:
               if (xSpdDist < 1609) sprintf(str, "%d ft", (int)(xSpdDist * 3.28084));
               else sprintf(str, "%.1f mi", xSpdDist / 1609.344f);
             }
-            ui_draw_text(s, tbt_x + (int)(200 * sc) + icon_w + (int)(15 * sc), tbt_y + (int)(200 * sc), str, (int)(40 * sc), COLOR_YELLOW, BOLD);
+            ui_draw_text(s, tbt_x + 200 + icon_w + 15, tbt_y + 200, str, 40, COLOR_YELLOW, BOLD);
         }
         else if (szSdiDescr.length() > 0) {
             float bounds[4];  // [xmin, ymin, xmax, ymax]를 저장하는 배열
-            nvgFontSize(s->vg, (int)(40 * sc));
-            nvgTextBounds(s->vg, tbt_x + (int)(200 * sc), tbt_y + (int)(200 * sc), szSdiDescr.toStdString().c_str(), NULL, bounds);
+            nvgFontSize(s->vg, 40);
+            nvgTextBounds(s->vg, tbt_x + 200, tbt_y + 200, szSdiDescr.toStdString().c_str(), NULL, bounds);
             float text_width = bounds[2] - bounds[0];
             float text_height = bounds[3] - bounds[1];
             ui_fill_rect(s->vg, { (int)bounds[0] - 10, (int)bounds[1] - 2, (int)text_width + 20, (int)text_height + 13 }, COLOR_GREEN, 10);
-            ui_draw_text(s, tbt_x + (int)(200 * sc), tbt_y + (int)(200 * sc), szSdiDescr.toStdString().c_str(), (int)(40 * sc), COLOR_WHITE, BOLD);
+            ui_draw_text(s, tbt_x + 200, tbt_y + 200, szSdiDescr.toStdString().c_str(), 40, COLOR_WHITE, BOLD);
         }
         else if (szPosRoadName.length() > 0) {
-          ui_draw_text(s, tbt_x + (int)(200 * sc), tbt_y + (int)(200 * sc), szPosRoadName.toStdString().c_str(), (int)(40 * sc), COLOR_WHITE, BOLD);
+          ui_draw_text(s, tbt_x + 200, tbt_y + 200, szPosRoadName.toStdString().c_str(), 40, COLOR_WHITE, BOLD);
           //ui_draw_text(s, tbt_x + 190, tbt_y - 5, szPosRoadName.toStdString().c_str(), 40, COLOR_WHITE, BOLD);
         }
 
@@ -1233,9 +1226,9 @@ protected:
             mktime(local);
             bool is_kor = s->language == "main_ko";
             sprintf(str, "%s: %.1f%s(%02d:%02d)", (is_kor)?"도착":"ETA", (float)nGoPosTime / 60., (is_kor)?"분":"MIN", local->tm_hour, local->tm_min);
-            ui_draw_text(s, tbt_x + (int)(190 * sc), tbt_y + (int)(80 * sc), str, (int)(50 * sc), COLOR_WHITE, BOLD);
+            ui_draw_text(s, tbt_x + 190, tbt_y + 80, str, 50, COLOR_WHITE, BOLD);
             sprintf(str, "%.1f%s", nGoPosDist / 1000. * ((s->scene.is_metric)?1:KM_TO_MILE), (s->scene.is_metric) ? "km" : "mile");
-            ui_draw_text(s, tbt_x + (int)(190 * sc) + (int)(120 * sc), tbt_y + (int)(130 * sc), str, (int)(50 * sc), COLOR_WHITE, BOLD);
+            ui_draw_text(s, tbt_x + 190 + 120, tbt_y + 130, str, 50, COLOR_WHITE, BOLD);
         }
         return 0;
     }
