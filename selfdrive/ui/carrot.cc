@@ -1214,7 +1214,9 @@ protected:
             ui_draw_text(s, tbt_x + 200, tbt_y + 200, szSdiDescr.toStdString().c_str(), 40, COLOR_WHITE, BOLD);
         }
         else if (szPosRoadName.length() > 0) {
-          ui_draw_text(s, tbt_x + 200, tbt_y + 200, szPosRoadName.toStdString().c_str(), 40, COLOR_WHITE, BOLD);
+          // v: 재억 요청(2026-08-22) - 글씨가 작아서 키움. 다만 바로 아래(같은 y좌표)에
+          // 카메라/방지턱 아이콘이 뜨는 자리라서, 그 자리를 밀어내지 않는 선에서만 키움. #문제시 원복
+          ui_draw_text(s, tbt_x + 200, tbt_y + 200, szPosRoadName.toStdString().c_str(), 46, COLOR_WHITE, BOLD);
           //ui_draw_text(s, tbt_x + 190, tbt_y - 5, szPosRoadName.toStdString().c_str(), 40, COLOR_WHITE, BOLD);
         }
 
@@ -1226,9 +1228,12 @@ protected:
             mktime(local);
             bool is_kor = s->language == "main_ko";
             sprintf(str, "%s: %.1f%s(%02d:%02d)", (is_kor)?"도착":"ETA", (float)nGoPosTime / 60., (is_kor)?"분":"MIN", local->tm_hour, local->tm_min);
-            ui_draw_text(s, tbt_x + 190, tbt_y + 80, str, 50, COLOR_WHITE, BOLD);
+            // v: 재억 요청(2026-08-22) - "도착:X분(HH:MM)"/거리 글씨를 키움. 아래쪽(+200)의
+            // 방지턱/카메라 아이콘, 제일 아래쪽 안내줄(szTBTMainText, -15)과 겹치지 않게
+            // 50→58 정도로만 키우고 y좌표도 살짝만 벌림. #문제시 원복
+            ui_draw_text(s, tbt_x + 190, tbt_y + 80, str, 58, COLOR_WHITE, BOLD);
             sprintf(str, "%.1f%s", nGoPosDist / 1000. * ((s->scene.is_metric)?1:KM_TO_MILE), (s->scene.is_metric) ? "km" : "mile");
-            ui_draw_text(s, tbt_x + 190 + 120, tbt_y + 130, str, 50, COLOR_WHITE, BOLD);
+            ui_draw_text(s, tbt_x + 190 + 120, tbt_y + 140, str, 58, COLOR_WHITE, BOLD);
         }
         return 0;
     }
