@@ -1007,7 +1007,10 @@ class CarrotServ:
         source = "gas"
         desired_speed = self.gas_override_speed
 
-      self.debugText += f"route={route_speed:.1f}"#f"desired={desired_speed:.1f},{source},g={self.gas_override_speed:.0f}"
+      # v: 재억 요청(2026-08-22) - 목적지 정보 박스에 개발용 디버그 숫자("route=300.0")가
+      # 같이 찍혀서 지저분하게 보임. 실제 주행에 필요한 정보가 아니라 개발 중 확인용으로
+      # 남겨뒀던 줄이라 제거. #문제시 원복
+      #self.debugText += f"route={route_speed:.1f}"#f"desired={desired_speed:.1f},{source},g={self.gas_override_speed:.0f}"
 
     left_spd_sec = 100
     left_tbt_sec = 100
