@@ -1192,9 +1192,13 @@ protected:
         if (xSignType > 0 && xSpdDist > 0) {
             // v: 사용자 요청(2026-08-08) - 방지턱/카메라 텍스트 라벨 대신 아이콘 + 거리로 표시.
             // 방지턱(22)은 방지턱 아이콘, 그 외 카메라/구간단속류는 공용 카메라 아이콘. #문제시 원복
+            // v: 재억 요청(2026-08-22) - 위쪽(도착시간/거리) 글씨를 키운 김에 이 줄도 같이 키움.
+            // 다만 위 줄이랑 안 겹치게, 박스 바닥(tbt_y+240)까지 남아있던 여유(200→240=40px)를
+            // 써서 기준선을 아래로 18px 내리고(200→218) 그만큼만 키움 - 아이콘 위쪽 끝이
+            // 오히려 원래보다 살짝 더 아래로 내려가서 위 줄과의 간격은 더 넉넉해짐. #문제시 원복
             const char* icon_name = (xSignType == 22) ? "ic_speed_bump" : "ic_camera";
-            int icon_w = 60, icon_h = 75;
-            ui_draw_image(s, { tbt_x + 200, tbt_y + 200 - icon_h, icon_w, icon_h }, icon_name, 1.0f);
+            int icon_w = 68, icon_h = 85;
+            ui_draw_image(s, { tbt_x + 200, tbt_y + 218 - icon_h, icon_w, icon_h }, icon_name, 1.0f);
             if (s->scene.is_metric) {
               if (xSpdDist < 1000) sprintf(str, "%d m", xSpdDist);
               else sprintf(str, "%.1f km", xSpdDist / 1000.f);
@@ -1202,21 +1206,21 @@ protected:
               if (xSpdDist < 1609) sprintf(str, "%d ft", (int)(xSpdDist * 3.28084));
               else sprintf(str, "%.1f mi", xSpdDist / 1609.344f);
             }
-            ui_draw_text(s, tbt_x + 200 + icon_w + 15, tbt_y + 200, str, 40, COLOR_YELLOW, BOLD);
+            ui_draw_text(s, tbt_x + 200 + icon_w + 15, tbt_y + 218, str, 46, COLOR_YELLOW, BOLD);
         }
         else if (szSdiDescr.length() > 0) {
             float bounds[4];  // [xmin, ymin, xmax, ymax]를 저장하는 배열
-            nvgFontSize(s->vg, 40);
-            nvgTextBounds(s->vg, tbt_x + 200, tbt_y + 200, szSdiDescr.toStdString().c_str(), NULL, bounds);
+            nvgFontSize(s->vg, 46);
+            nvgTextBounds(s->vg, tbt_x + 200, tbt_y + 218, szSdiDescr.toStdString().c_str(), NULL, bounds);
             float text_width = bounds[2] - bounds[0];
             float text_height = bounds[3] - bounds[1];
             ui_fill_rect(s->vg, { (int)bounds[0] - 10, (int)bounds[1] - 2, (int)text_width + 20, (int)text_height + 13 }, COLOR_GREEN, 10);
-            ui_draw_text(s, tbt_x + 200, tbt_y + 200, szSdiDescr.toStdString().c_str(), 40, COLOR_WHITE, BOLD);
+            ui_draw_text(s, tbt_x + 200, tbt_y + 218, szSdiDescr.toStdString().c_str(), 46, COLOR_WHITE, BOLD);
         }
         else if (szPosRoadName.length() > 0) {
           // v: 재억 요청(2026-08-22) - 글씨가 작아서 키움. 다만 바로 아래(같은 y좌표)에
           // 카메라/방지턱 아이콘이 뜨는 자리라서, 그 자리를 밀어내지 않는 선에서만 키움. #문제시 원복
-          ui_draw_text(s, tbt_x + 200, tbt_y + 200, szPosRoadName.toStdString().c_str(), 46, COLOR_WHITE, BOLD);
+          ui_draw_text(s, tbt_x + 200, tbt_y + 218, szPosRoadName.toStdString().c_str(), 46, COLOR_WHITE, BOLD);
           //ui_draw_text(s, tbt_x + 190, tbt_y - 5, szPosRoadName.toStdString().c_str(), 40, COLOR_WHITE, BOLD);
         }
 
