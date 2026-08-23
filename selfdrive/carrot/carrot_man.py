@@ -1045,6 +1045,13 @@ class CarrotMan:
 
     print("Received points:", len(self.navi_points))
 
+    # v: 재억 제보(2026-08-23) - 지금까지 이 좌표를 self.navi_points에만 저장해두고
+    # 실제 지도(맵박스) 쪽으로는 한 번도 넘겨준 적이 없었음. send_routes()가 navRoute를
+    # 정식으로 publish하는 함수인데, 콤마 자체 내비(navd)가 계산한 경로에만 연결돼있고
+    # 폰(카카오)에서 온 이 경로는 연결이 안 돼 있었음. 여기서 호출해줘야 지도 화면에
+    # 파란 선으로 실제로 그려짐. #문제시 원복
+    self.send_routes(coords)
+
     self.send_routes(coords)
 
     if coords:
