@@ -135,6 +135,14 @@ class CarrotServ:
     self.nPosSpeed = 0.0
     self.nPosAngle = 0.0
     self.nPosAnglePhone = 0.0
+    # v: 재억 제보(2026-08-23) - 지도 위 내 위치 마커/화면 방향이 "덜덜 떨린다"는 문제.
+    # 좌표(위치) 자체는 폰 GPS(정확도 더 좋음, 재억 확인)가 맞지만, 폰이 같이 보내주는
+    # "방향(heading)" 값을 그대로(보정 없이) 써서 방향이 흔들릴 때마다 지도가 같이
+    # 흔들렸음. 위치는 그대로 폰 걸 쓰고, 방향만 지수평활(저역통과 필터)로 부드럽게
+    # 걸러서 사용. #문제시 원복
+    self.nPosAnglePhoneSmoothed = 0.0
+    self._phone_heading_vec_x = None
+    self._phone_heading_vec_y = None
 
     self.diff_angle_count = 0
     self.last_calculate_gps_time = 0
@@ -662,7 +670,7 @@ class CarrotServ:
     if gps_updated_navi:
       bearing = self.nPosAngle
     elif gps_updated_phone:
-      bearing = self.nPosAnglePhone
+      bearing = self.nPosAnglePhoneSmoothed
     elif self.gps_valid:
       bearing = self.nPosAngle = gps.bearingDeg
 
@@ -1302,6 +1310,21 @@ class CarrotServ:
     # 3초간 navi 데이터가 없으면, phone gps로 업데이트
     if "latitude" in json:
       self.nPosAnglePhone = _f(json.get("heading"), self.nPosAngle)
+      # v: 재억 제보(2026-08-23) - 방향값 저역통과 필터(지수평활). 0~360도 경계를
+      # 넘나들 때(예: 359도->1도) 단순 평균내면 이상한 값이 나오므로, 단위벡터(x,y)로
+      # 바꿔서 각각 평활한 뒤 다시 각도로 되돌리는 방식으로 안전하게 처리. #문제시 원복
+      import math as _math
+      rad = _math.radians(self.nPosAnglePhone)
+      new_x, new_y = _math.cos(rad), _math.sin(rad)
+      if self._phone_heading_vec_x is None:
+        self._phone_heading_vec_x, self._phone_heading_vec_y = new_x, new_y
+      else:
+        alpha = 0.25  # 낮을수록 더 부드럽지만 실제 회전 반영이 느려짐
+        self._phone_heading_vec_x = self._phone_heading_vec_x * (1 - alpha) + new_x * alpha
+        self._phone_heading_vec_y = self._phone_heading_vec_y * (1 - alpha) + new_y * alpha
+      self.nPosAnglePhoneSmoothed = _math.degrees(
+        _math.atan2(self._phone_heading_vec_y, self._phone_heading_vec_x)
+      ) % 360
       self.phone_latitude = _f(json.get("latitude"), self.vpPosPointLatNavi)
       self.phone_longitude = _f(json.get("longitude"), self.vpPosPointLonNavi)
       self.phone_gps_accuracy = _f(json.get("accuracy"), 0)
@@ -1311,7 +1334,7 @@ class CarrotServ:
         self.vpPosPointLatNavi = self.phone_latitude
         self.vpPosPointLonNavi = self.phone_longitude
 
-        self.nPosAngle = self.nPosAnglePhone
+        self.nPosAngle = self.nPosAnglePhoneSmoothed
         # self.nPosSpeed = self.ve # TODO speed from v_ego
         self.last_update_gps_time_phone = self.last_calculate_gps_time = now        
         self.nPosSpeed = float(json.get("gps_speed", 0))
