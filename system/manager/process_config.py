@@ -142,6 +142,10 @@ procs = [
   #PythonProcess("fleet_manager", "selfdrive.frogpilot.fleetmanager.fleet_manager", check_fleet, enabled=not PC),
   PythonProcess("fleet_manager", "selfdrive.frogpilot.fleetmanager.fleet_manager", check_fleet),
   PythonProcess("carrot_man", "selfdrive.carrot.carrot_man", always_run),#, enabled=not PC),
+  # v: 재억 요청(2026-08-23) - c3-wip 웹설정의 "자동 업데이트" 핵심(자동 git pull)만 경량
+  # 이식. 기본은 꺼짐(CarrotAutoGitPull 파라미터). 주차/정차(Offroad) 상태일 때만 받도록
+  # 조건 추가함(오토튜너 도입 때와 동일 원칙 - 운전 중엔 절대 안 건드림). #문제시 원복
+  PythonProcess("carrot_auto_git_pull", "selfdrive.carrot.carrot_auto_git_pull", always_run),
 
   PythonProcess("carrot_server", "selfdrive.carrot.carrot_server", always_run),
 

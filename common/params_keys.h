@@ -178,6 +178,8 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"AutoCurveSpeedLowerLimit", {PERSISTENT, INT, "70"}},
     {"AutoCurveSpeedFactor", {PERSISTENT, INT, "100"}},
     {"AutoCurveSpeedAggressiveness", {PERSISTENT, INT, "100"}},
+    // v: 재억 요청(2026-08-23) - 자동 git pull 켜고 끄는 스위치. 기본 꺼짐. #문제시 원복
+    {"CarrotAutoGitPull", {PERSISTENT, BOOL, "0"}},
 
     {"AutoTurnControl", {PERSISTENT, INT, "3"}},
     {"AutoTurnControlSpeedTurn", {PERSISTENT, INT, "30"}},

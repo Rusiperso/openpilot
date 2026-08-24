@@ -836,6 +836,10 @@ CarrotPanel::CarrotPanel(QWidget* parent) : QWidget(parent) {
   startToggles->addItem(new CValueControl("SoundVolumeAdjustEngage", tr("Sound Volume, Engage(10%)"), "", 5, 200, 5));
   startToggles->addItem(new CValueControl("MaxTimeOffroadMin", tr("Power off time (min)"), "", 1, 600, 10));
   startToggles->addItem(new CValueControl("EnableConnect", tr("EnableConnect"), tr("Your device may be banned by Comma"), 0, 2, 1));
+  // v: 재억 요청(2026-08-23) - my 브랜치 자동 git pull 켜고 끄는 스위치. 주차 상태일
+  // 때만 받음. 소프트웨어에 문제가 생겨도 복구 가능한 사람만 켜라는 원래 c3-wip
+  // 안내와 동일한 취지. #문제시 원복
+  startToggles->addItem(new ParamControl("CarrotAutoGitPull", tr("Auto git pull (my branch, parked only)"), tr("Automatically git pull when parked and new commits exist. No reboot - reboot yourself when ready. Only for people who can recover if something breaks."), "", this));
   startToggles->addItem(new CValueControl("MapboxStyle", tr("Mapbox Style(0)"), "", 0, 2, 1));
   startToggles->addItem(new CValueControl("RecordRoadCam", tr("Record Road camera(0)"), tr("1:RoadCam, 2:RoadCam+WideRoadCam"), 0, 2, 1));
   startToggles->addItem(new CValueControl("HDPuse", tr("Use HDP(CCNC)(0)"), tr("1:While Using APN, 2:Always"), 0, 2, 1));
