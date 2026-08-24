@@ -185,7 +185,6 @@ class LongitudinalPlanner:
       self.a_desired = np.clip(sm['carState'].aEgo, accel_limits[0], accel_limits[1])
       
       self.mpc.prev_a = np.full(N+1, self.a_desired) ## carrot
-      accel_limits_turns[0] = accel_limits_turns[0] = 0.0 ## carrot
 
       self.reset_decel_timer = int(2.0 / self.dt)
       self.reset_decel_start_a = self.a_desired
