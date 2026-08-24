@@ -11,6 +11,15 @@ LaneChangeState = log.LaneChangeState
 LaneChangeDirection = log.LaneChangeDirection
 TurnDirection = log.Desire
 
+# ══════════════════════════════════════════════════════════════════════════════
+# [차량 모델 선택 (ccNC DBC 규격)] - 당근 c3-wip 이식, 문제시 CAR_MODEL_TYPE = 0 으로 원복
+# 0: 순정(1), 1: 승용차(3), 2: 트럭(5), 3: 보행자(7), 4: 자전거(9), 5: 오토바이(11), 6: 라바콘(13)
+# ══════════════════════════════════════════════════════════════════════════════
+CAR_MODEL_TYPE = 1
+
+_MODEL_ID_MAP = {0: 1, 1: 3, 2: 5, 3: 7, 4: 9, 5: 11, 6: 13}
+CAR_MODEL_ID = _MODEL_ID_MAP.get(CAR_MODEL_TYPE, 1)
+
 
 def hyundai_crc8(data: bytes) -> int:
   poly = 0x2F
@@ -640,7 +649,11 @@ def _apply_radar_blink(values, radar_pairs, frame, *,
     interval = _clip_int(interval, 1, max_interval)
 
     blink = (frame // interval) & 1
-    values[det_key] = 2 - blink
+    # 문제시 원복: values[det_key] = 2 - blink
+    if CAR_MODEL_ID > 1:
+      values[det_key] = (CAR_MODEL_ID + 1) if blink else CAR_MODEL_ID
+    else:
+      values[det_key] = 2 - blink
     values[dist_key] = min_dist
 
 def _make_ccnc_values(values, CS, lat_active, frame, hud_control,
@@ -669,7 +682,7 @@ def _make_ccnc_values(values, CS, lat_active, frame, hud_control,
       #문제시 원복
       #if values[det_key] >= 4 and values[dist_key] != 0:
       #  values[det_key] = 1
-      values[det_key] = 1  # LKA off 시에도 카메라 원본값과 무관하게 항상 표시
+      values[det_key] = CAR_MODEL_ID  # LKA off 시에도 카메라 원본값과 무관하게 항상 표시 (당근 c3-wip: 3D 모델 반영)
 
     if blink_pairs:
       _apply_radar_blink(values, blink_pairs, frame, t=blink_t)
@@ -857,7 +870,8 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
 
         if hud_control.leadDistance > 0:
           values["FF_DISTANCE"] = hud_control.leadDistance
-          ff_type = 3 if hud_control.leadRadar == 1 else 13
+          # 문제시 원복: ff_type = 3 if hud_control.leadRadar == 1 else 13
+          ff_type = CAR_MODEL_ID if CAR_MODEL_ID > 1 else (3 if hud_control.leadRadar == 1 else 13)
           values["FF_DETECT"] = ff_type if hud_control.leadRelSpeed > -0.1 else ff_type + 1
 
         _make_ccnc_values(
