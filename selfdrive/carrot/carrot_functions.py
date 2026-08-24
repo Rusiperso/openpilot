@@ -8,7 +8,6 @@ from openpilot.common.realtime import DT_MDL
 from openpilot.common.conversions import Conversions as CV
 from openpilot.common.filter_simple import MyMovingAverage
 from openpilot.selfdrive.selfdrived.events import Events
-from openpilot.selfdrive.carrot.carrot_learning import CarrotLearner, DrivingStyleProfiler
 from openpilot.common.swaglog import cloudlog
 
 EventName = log.OnroadEvent.EventName
@@ -170,8 +169,6 @@ class CarrotPlanner:
 
     self._stop_x_rl = None
     self.last_event_time = 0.0
-    self.learner = CarrotLearner()
-    self.profiler = DrivingStyleProfiler()
     self.filtered_j_lead = 0.0
     self._v_ego_kph = 0.0
 
@@ -735,34 +732,9 @@ class CarrotPlanner:
     elif v_ego_kph < _LAUNCH_GAP_ARM_KPH:
       self.launch_close_gap = True
 
-    # 현재 GAP 단계 파악 (Personality 기반)
-    personality = sm['selfdriveState'].personality
-    current_gap = 2  # default standard
-    if personality == log.LongitudinalPersonality.moreRelaxed: current_gap = 4
-    elif personality == log.LongitudinalPersonality.relaxed: current_gap = 3
-    elif personality == log.LongitudinalPersonality.standard: current_gap = 2
-    elif personality == log.LongitudinalPersonality.aggressive: current_gap = 1
-    self.learner.set_current_gap(current_gap)
-
-    # Auto-Tuner는 비핵심 학습 기능이므로, 여기서 예외가 나도 안전필수
-    # 종방향 플래너(plannerd)가 죽지 않도록 반드시 격리한다.
-    try:
-      self.learner.update(v_ego_kph, carstate.gasPressed, engaged, gear_park,
-                          steer_deg=carstate.steeringAngleDeg, steer_pressed=carstate.steeringPressed,
-                          brake_pressed=carstate.brakePressed,
-                          lead_drel=leadOne.dRel if leadOne.status else 0.0,
-                          lead_v_kph=leadOne.vLead * CV.MS_TO_KPH if leadOne.status else 0.0,
-                          a_ego=a_ego, lead_jlead=leadOne.jLead if leadOne.status else 0.0,
-                          v_cruise_kph=v_cruise_kph,
-                          gas_val=carstate.gas, brake_val=carstate.brake, sm=sm)
-
-      # DSP: 수동 주행 성향 프로파일링 (오픈파일럿 미인게이지 상태에서만 수집)
-      self.profiler.update(v_ego_kph, engaged, gear_park,
-                           a_ego=a_ego, brake_pressed=carstate.brakePressed,
-                           lead_drel=leadOne.dRel if leadOne.status else 0.0,
-                           lead_v_kph=leadOne.vLead * CV.MS_TO_KPH if leadOne.status else 0.0)
-    except Exception:
-      cloudlog.exception("CarrotLearner/Profiler update failed")
+    # v: 재억 요청(2026-08-23) - Auto-Tuner(오토튜너) 기능 완전 제거. 갈수록 이상해진다는
+    # 재억 판단으로 뺌. GAP 단계 파악해서 학습기에 넘겨주던 부분이었는데, 학습기 자체를
+    # 없앴으니 이 계산도 같이 제거. #문제시 원복
 
     return v_cruise_kph
 

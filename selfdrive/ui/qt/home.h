@@ -20,25 +20,6 @@
 #include <QMap>
 #include <QCheckBox>
 
-class AutoTunerGuideDialog : public DialogBase {
-  Q_OBJECT
-
-public:
-  explicit AutoTunerGuideDialog(const QString &html_content, QWidget *parent = nullptr);
-  void showEvent(QShowEvent *event) override;
-};
-
-class AutoTunerDialog : public DialogBase {
-  Q_OBJECT
-
-public:
-  QMap<QString, QCheckBox*> item_checkboxes;
-  QJsonObject recommendations;
-
-  explicit AutoTunerDialog(const QString &title_text, const QJsonObject &recs, QWidget *parent = nullptr);
-  QJsonObject getSelectedItems();
-};
-
 class OffroadHome : public QFrame {
   Q_OBJECT
 
