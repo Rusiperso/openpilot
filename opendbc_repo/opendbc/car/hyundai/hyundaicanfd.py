@@ -15,7 +15,7 @@ TurnDirection = log.Desire
 # [차량 모델 선택 (ccNC DBC 규격)] - 당근 c3-wip 이식, 문제시 CAR_MODEL_TYPE = 0 으로 원복
 # 0: 순정(1), 1: 승용차(3), 2: 트럭(5), 3: 보행자(7), 4: 자전거(9), 5: 오토바이(11), 6: 라바콘(13)
 # ══════════════════════════════════════════════════════════════════════════════
-CAR_MODEL_TYPE = 1
+CAR_MODEL_TYPE = 0
 
 _MODEL_ID_MAP = {0: 1, 1: 3, 2: 5, 3: 7, 4: 9, 5: 11, 6: 13}
 CAR_MODEL_ID = _MODEL_ID_MAP.get(CAR_MODEL_TYPE, 1)
