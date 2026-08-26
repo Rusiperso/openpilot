@@ -80,7 +80,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"LiveTorqueParameters", {PERSISTENT | DONT_LOG, BYTES}},
     {"LocationFilterInitialState", {PERSISTENT, BYTES}},
     {"LongitudinalManeuverMode", {CLEAR_ON_MANAGER_START | CLEAR_ON_OFFROAD_TRANSITION, BOOL}},
-    {"LongitudinalPersonality", {PERSISTENT, INT, "2"}},
+    {"LongitudinalPersonality", {PERSISTENT, INT, "1"}},
     {"NetworkMetered", {PERSISTENT, BOOL}},
     {"ObdMultiplexingChanged", {CLEAR_ON_MANAGER_START | CLEAR_ON_ONROAD_TRANSITION, BOOL}},
     {"ObdMultiplexingEnabled", {CLEAR_ON_MANAGER_START | CLEAR_ON_ONROAD_TRANSITION, BOOL}},
@@ -167,8 +167,20 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"CruiseEcoControl", {PERSISTENT, INT, "5"}},
     {"CarrotCruiseDecel", {PERSISTENT, INT, "-1"}},
     {"CarrotCruiseAtcDecel", {PERSISTENT, INT, "-1"}},
-    // v: 재억 요청(2026-08-23) - Auto-Tuner/DSP 관련 파라미터 전부 제거(기능 자체를
-    // 없앴음, "갈수록 이상해진다"는 재억 판단). #문제시 원복
+    {"CarrotDSPComplete", {PERSISTENT, BOOL, "0"}},            // DSP: 프로파일링 완료 여부
+    {"CarrotDSPData", {PERSISTENT, BYTES, ""}},                // DSP: 수동 주행 프로파일 데이터 (JSON)
+    {"CarrotDSPPopupReady", {PERSISTENT, BOOL, "0"}},          // DSP: 팝업 신호
+    {"CarrotDSPRecommend", {PERSISTENT, BYTES, ""}},           // DSP: 초기값 추천 (JSON)
+    {"CarrotLearningActive", {PERSISTENT, INT, "0"}},          // Auto-Tuner: 학습 활성화 (0=off, 1=on)
+    {"CarrotLearningClear", {PERSISTENT, BOOL, "0"}},          // Auto-Tuner: 데이터 초기화 신호
+    {"CarrotLearningData", {PERSISTENT, BYTES, ""}},           // Auto-Tuner: 누적 데이터 (JSON)
+    {"CarrotLearningHistory", {PERSISTENT, BYTES, ""}},        // Auto-Tuner: 튜닝 이력 (JSON)
+    {"CarrotLearningPopupReady", {PERSISTENT, BOOL, "0"}},     // Auto-Tuner: 팝업 신호
+    {"CarrotLearningPopupSource", {PERSISTENT, STRING, ""}},   // Auto-Tuner: 팝업 발생 소스 ("stop", "timer", "parking", etc.)
+    {"CarrotLearningRecommend", {PERSISTENT, BYTES, ""}},      // Auto-Tuner: 추천값 (JSON)
+    {"CarrotTunerApplyLat", {PERSISTENT, INT, "0"}},           // Auto-Tuner: 조향(LAT) 적용 여부 (0=off, 1=on)
+    {"CarrotTunerApplyLong", {PERSISTENT, INT, "0"}},          // Auto-Tuner: 가감속(LONG) 적용 여부 (0=off, 1=on)
+    {"CarrotTunerFactoryReset", {PERSISTENT, BOOL, "0"}},      // Auto-Tuner: 튜닝 파라미터 공장초기화 신호
 
     {"AutoGasTokSpeed", {PERSISTENT, INT, "0"}},
     {"AutoGasSyncSpeed", {PERSISTENT, INT, "0"} },
@@ -178,10 +190,8 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"AutoCurveSpeedLowerLimit", {PERSISTENT, INT, "70"}},
     {"AutoCurveSpeedFactor", {PERSISTENT, INT, "100"}},
     {"AutoCurveSpeedAggressiveness", {PERSISTENT, INT, "100"}},
-    // v: 재억 요청(2026-08-23) - 자동 git pull 켜고 끄는 스위치. 기본 꺼짐. #문제시 원복
-    {"CarrotAutoGitPull", {PERSISTENT, BOOL, "0"}},
 
-    {"AutoTurnControl", {PERSISTENT, INT, "0"}},
+    {"AutoTurnControl", {PERSISTENT, INT, "3"}},
     {"AutoTurnControlSpeedTurn", {PERSISTENT, INT, "30"}},
     {"AutoTurnControlTurnEnd", {PERSISTENT, INT, "5"}},
     {"AutoTurnMapChange", {PERSISTENT, INT, "0"}},
@@ -194,7 +204,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"AutoNaviSpeedDecelRate", {PERSISTENT, INT, "100"}},
     {"AutoNaviSpeedSafetyFactor", {PERSISTENT, INT, "100"}},
     {"AutoNaviCountDownMode", {PERSISTENT, INT, "2"}},
-    {"TurnSpeedControlMode", {PERSISTENT, INT, "0"}},
+    {"TurnSpeedControlMode", {PERSISTENT, INT, "2"}},
 
     {"MapTurnSpeedFactor", {PERSISTENT, INT, "100"}},
     {"ModelTurnSpeedFactor", {PERSISTENT, INT, "0"}},
@@ -202,8 +212,8 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"AutoSpeedUptoRoadSpeedLimit", {PERSISTENT, INT, "0"}},
     {"AutoRoadSpeedAdjust", {PERSISTENT, INT, "100"}},
 
-    {"StopDistanceCarrot", {PERSISTENT, INT, "520"}},
-    {"JLeadFactor3", {PERSISTENT, INT, "0"}},
+    {"StopDistanceCarrot", {PERSISTENT, INT, "530"}},
+    {"JLeadFactor3", {PERSISTENT, INT, "25"}},
     {"CruiseButtonMode", {PERSISTENT, INT, "3"}},
     {"CancelButtonMode", {PERSISTENT, INT, "0"}},
     {"LfaButtonMode", {PERSISTENT, INT, "0"}},
@@ -227,17 +237,17 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"TrafficLightDetectMode", {PERSISTENT, INT, "2"}},
 
     {"SteerActuatorDelay", {PERSISTENT, INT, "35"}},
-    {"LatSmoothSec", {PERSISTENT, INT, "15"}},
+    {"LatSmoothSec", {PERSISTENT, INT, "20"}},
     {"LatSuspendAngleDeg", {PERSISTENT, INT, "300"}},
     {"CruiseOnDist", {PERSISTENT, INT, "0"}},
 
-    {"CruiseMaxVals0", {PERSISTENT, INT, "140"}},
-    {"CruiseMaxVals1", {PERSISTENT, INT, "145"}},
-    {"CruiseMaxVals2", {PERSISTENT, INT, "85"}},
+    {"CruiseMaxVals0", {PERSISTENT, INT, "150"}},
+    {"CruiseMaxVals1", {PERSISTENT, INT, "160"}},
+    {"CruiseMaxVals2", {PERSISTENT, INT, "100"}},
     {"CruiseMaxVals3", {PERSISTENT, INT, "50"}},
-    {"CruiseMaxVals4", {PERSISTENT, INT, "25"}},
-    {"CruiseMaxVals5", {PERSISTENT, INT, "20"}},
-    {"CruiseMaxVals6", {PERSISTENT, INT, "15"}},
+    {"CruiseMaxVals4", {PERSISTENT, INT, "30"}},
+    {"CruiseMaxVals5", {PERSISTENT, INT, "25"}},
+    {"CruiseMaxVals6", {PERSISTENT, INT, "20"}},
 
     {"LongTuningKpV", {PERSISTENT, INT, "100"}},
     {"LongTuningKiV", {PERSISTENT, INT, "0"}},
@@ -245,7 +255,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"LongActuatorDelay", {PERSISTENT, INT, "32"}},
     {"VEgoStopping", {PERSISTENT, INT, "3"}},
 
-    {"RadarReactionFactor", {PERSISTENT, INT, "70"}},
+    {"RadarReactionFactor", {PERSISTENT, INT, "75"}},
     {"EnableRadarTracks", {PERSISTENT, INT, "2"}},
     {"RadarLatFactor", {PERSISTENT, INT, "150"}},
     {"EnableCornerRadar", {PERSISTENT, INT, "1"}},
@@ -265,18 +275,18 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"SoundVolumeAdjust", {PERSISTENT, INT, "150"}},
     {"SoundVolumeAdjustEngage", {PERSISTENT, INT, "100"}},
 
-    {"TFollowGap1", {PERSISTENT, INT, "160"}},
-    {"TFollowGap2", {PERSISTENT, INT, "180"}},
-    {"TFollowGap3", {PERSISTENT, INT, "200"}},
-    {"TFollowGap4", {PERSISTENT, INT, "220"}},
+    {"TFollowGap1", {PERSISTENT, INT, "60"}},
+    {"TFollowGap2", {PERSISTENT, INT, "90"}},
+    {"TFollowGap3", {PERSISTENT, INT, "140"}},
+    {"TFollowGap4", {PERSISTENT, INT, "200"}},
     {"TFollowSpeedFactor", {PERSISTENT, INT, "0"}},
 
-    {"DynamicTFollow", {PERSISTENT, INT, "15"}},
+    {"DynamicTFollow", {PERSISTENT, INT, "35"}},
     {"DynamicTFollowLC", {PERSISTENT, INT, "50"}},
     {"TFollowDecelBoost", {PERSISTENT, INT, "0"}},
-    {"EnableSpeedTF", {PERSISTENT, INT, "-2"}},
-    {"AChangeCostStarting", {PERSISTENT, INT, "3"}},
-    {"TrafficStopDistanceAdjust", {PERSISTENT, INT, "-125"}},
+    {"EnableSpeedTF", {PERSISTENT, INT, "0"}},
+    {"AChangeCostStarting", {PERSISTENT, INT, "10"}},
+    {"TrafficStopDistanceAdjust", {PERSISTENT, INT, "-130"}},
 
     {"HapticFeedbackWhenSpeedCamera", {PERSISTENT, INT, "0"}},
     {"UseLaneLineSpeed", {PERSISTENT, INT, "90"}},
@@ -303,10 +313,10 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
 
     {"LateralTorqueCustom", {PERSISTENT, INT, "1"}},
     {"LateralTorqueAccelFactor", {PERSISTENT, INT, "2645"}},
-    {"LateralTorqueFriction", {PERSISTENT, INT, "44"}},
-    {"LateralTorqueKpV", {PERSISTENT, INT, "100"}},
-    {"LateralTorqueKiV", {PERSISTENT, INT, "2"}},
-    {"LateralTorqueKf", {PERSISTENT, INT, "83"}},
+    {"LateralTorqueFriction", {PERSISTENT, INT, "50"}},
+    {"LateralTorqueKpV", {PERSISTENT, INT, "115"}},
+    {"LateralTorqueKiV", {PERSISTENT, INT, "5"}},
+    {"LateralTorqueKf", {PERSISTENT, INT, "80"}},
     {"LateralTorqueKd", {PERSISTENT, INT, "0"}},
 
     {"CustomSteerMax", {PERSISTENT, INT, "409"}},
