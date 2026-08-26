@@ -27,13 +27,6 @@ V_EGO_STATIONARY = 4.   # no stationary object flag below this speed
 RADAR_TO_CENTER = 2.7   # (deprecated) RADAR is ~ 2.7m ahead from center of car
 RADAR_TO_CAMERA = 1.52  # RADAR is ~ 1.5m ahead from center of mesh frame
 
-# 문제시 원복 (당근 c3-wip 이식: 앞차로 인정할지 판단하는 거리별 기준)
-CENTER_LEAD_NEAR_DPATH_LIMIT = 1.2
-CENTER_LEAD_FAR_DPATH_LIMIT = 0.9
-CENTER_LEAD_FAR_DREL = 60.0
-CENTER_LEAD_NEAR_IN_LANE_PROB = 0.3
-CENTER_LEAD_FAR_IN_LANE_PROB = 0.45
-
 
 def laplacian_pdf(x: float, mu: float, b: float):
   diff = abs(x - mu) / max(b, 1e-4)
@@ -613,15 +606,6 @@ class RadarD:
 
     return lead_dict, radar
 
-  def _is_center_lead_candidate(self, t):
-    # 문제시 원복 (당근 c3-wip 이식: 먼 거리일수록 앞차 인정 기준을 더 엄격하게 - 옆 차로 차량 오인식 감소)
-    in_lane_min = CENTER_LEAD_NEAR_IN_LANE_PROB
-    dpath_limit = CENTER_LEAD_NEAR_DPATH_LIMIT
-    if t.dRel > CENTER_LEAD_FAR_DREL:
-      in_lane_min = CENTER_LEAD_FAR_IN_LANE_PROB
-      dpath_limit = CENTER_LEAD_FAR_DPATH_LIMIT
-    return t.in_lane_prob > in_lane_min and abs(t.dPath) < dpath_limit
-
   def compute_leads(self, v_ego, tracks, md):
     lead_msg = md.leadsV3[0] if (md is not None and len(md.position.x) == 33) else None
     self.leadCutIn = {'status': False}
@@ -638,7 +622,7 @@ class RadarD:
     for c in tracks.values():
       y_rel_neg = - c.yRel
       # center
-      if self._is_center_lead_candidate(c):  # 문제시 원복: 기존엔 c.in_lane_prob > 0.3 고정 기준
+      if c.in_lane_prob > 0.3:
         if c.cnt > 3:
           ld = c.get_RadarState(lead_msg.prob, float(-lead_msg.y[0]))
           ld['modelProb'] = 0.01
