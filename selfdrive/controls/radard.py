@@ -33,6 +33,10 @@ CENTER_LEAD_FAR_DPATH_LIMIT = 0.9
 CENTER_LEAD_FAR_DREL = 60.0
 CENTER_LEAD_NEAR_IN_LANE_PROB = 0.3
 CENTER_LEAD_FAR_IN_LANE_PROB = 0.45
+# 문제시 원복 (재억 제보 2026-08-29) - 이미 앞차로 인정된 트랙은 이 거리까지는
+# 계속 느슨한 기준(NEAR)을 유지. CENTER_LEAD_FAR_DREL(60m)보다 충분히 멀리 둬서
+# 경계 근처 깜빡임을 막고, 한 번 잡은 앞차를 더 멀리서도 유지시킴.
+CENTER_LEAD_HYSTERESIS_DREL = 90.0
 
 
 def laplacian_pdf(x: float, mu: float, b: float):
@@ -58,6 +62,13 @@ class Track:
     self.in_lane_prob_future = 0.0
 
     self.dPath = 0.0
+
+    # ---- center-lead hysteresis state (new) ----
+    # 문제시 원복 (재억 제보 2026-08-29: "쭉 감속하다가 브레이크 뗐다 다시 밟는 느낌" -
+    # 60m 경계에서 완충구간 없이 기준이 바로 빡빡해져서, 그 근처에서 애매한 위치의
+    # 앞차가 인정/미인정을 반복(깜빡임)하던 게 원인으로 보임. 한 번 앞차로 인정된
+    # 트랙은 그 상태를 기억해뒀다가, 그 상태를 벗어날 때만 반대쪽 기준을 적용)
+    self.was_center_lead = False
 
     # ---- noise filter state (new) ----
     self._vLead_last = 0.0
@@ -614,13 +625,28 @@ class RadarD:
     return lead_dict, radar
 
   def _is_center_lead_candidate(self, t):
-    # 문제시 원복 (당근 c3-wip 이식: 먼 거리일수록 앞차 인정 기준을 더 엄격하게 - 옆 차로 차량 오인식 감소)
-    in_lane_min = CENTER_LEAD_NEAR_IN_LANE_PROB
-    dpath_limit = CENTER_LEAD_NEAR_DPATH_LIMIT
-    if t.dRel > CENTER_LEAD_FAR_DREL:
-      in_lane_min = CENTER_LEAD_FAR_IN_LANE_PROB
-      dpath_limit = CENTER_LEAD_FAR_DPATH_LIMIT
-    return t.in_lane_prob > in_lane_min and abs(t.dPath) < dpath_limit
+    # 문제시 원복 (재억 제보 2026-08-29, "쭉 감속하다 브레이크 뗐다 다시 밟는 느낌" -
+    # 기존엔 dRel이 CENTER_LEAD_FAR_DREL(60m)을 넘는 순간 완충구간 없이 바로 더
+    # 엄격한 기준(in_lane_prob>0.45, dPath<0.9)으로 바뀌어서, 그 경계 근처에 애매하게
+    # 걸친 앞차가 인정/미인정을 반복(깜빡임)할 수 있었음. 히스테리시스로 교체:
+    # - 아직 앞차로 인정된 적 없는 트랙 -> 기존과 동일하게 60m를 기준으로 판단(새로
+    #   앞차를 잡을 때는 오인식 방지를 위해 엄격한 기준을 그대로 씀)
+    # - 이미 앞차로 인정돼 있던 트랙 -> CENTER_LEAD_FAR_DREL보다 훨씬 멀리
+    #   (CENTER_LEAD_HYSTERESIS_DREL, 90m)까지는 계속 느슨한 기준을 유지 - 경계선
+    #   근처 깜빡임 방지 + "한 번 잡은 앞차는 더 멀리서도 계속 인식"이라는 재억 요청도
+    #   같이 만족시킴
+    if t.was_center_lead and t.dRel <= CENTER_LEAD_HYSTERESIS_DREL:
+      in_lane_min = CENTER_LEAD_NEAR_IN_LANE_PROB
+      dpath_limit = CENTER_LEAD_NEAR_DPATH_LIMIT
+    else:
+      in_lane_min = CENTER_LEAD_NEAR_IN_LANE_PROB
+      dpath_limit = CENTER_LEAD_NEAR_DPATH_LIMIT
+      if t.dRel > CENTER_LEAD_FAR_DREL:
+        in_lane_min = CENTER_LEAD_FAR_IN_LANE_PROB
+        dpath_limit = CENTER_LEAD_FAR_DPATH_LIMIT
+    result = t.in_lane_prob > in_lane_min and abs(t.dPath) < dpath_limit
+    t.was_center_lead = result
+    return result
 
   def compute_leads(self, v_ego, tracks, md):
     lead_msg = md.leadsV3[0] if (md is not None and len(md.position.x) == 33) else None
