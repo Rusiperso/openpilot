@@ -86,6 +86,12 @@ class CarrotServ:
     self.nRoadLimitSpeed = 30
     self.nRoadLimitSpeed_last = 30
     self.nRoadLimitSpeed_counter = 0
+    # 문제시 원복 (재억 질문 2026-08-30: "80->60처럼 도로 규정속도가 확 바뀌는
+    # 구간에서 목표속도가 부드럽게 안 줄어든다" - limit_speed(road)는 카메라/방지턱과
+    # 달리 거리 기반 감속 곡선이 없이 즉시 뚝 떨어졌음. 이 값 자체에 "1초에 최대
+    # ROAD_LIMIT_SPEED_MAX_DECEL_RATE km/h까지만 낮아질 수 있다"는 완충을 걸어서
+    # 부드럽게 만듦. 속도가 올라가는 쪽(제한 완화)은 안전과 무관해 즉시 반영)
+    self.limit_speed_filtered = 200.0
 
     self.active_carrot = 0     ## 1: CarrotMan Active, 2: sdi active , 3: speed decel active, 4: section active, 5: bump active, 6: speed limit active
     self.active_count = 0
@@ -908,6 +914,19 @@ class CarrotServ:
         if not self.is_metric:
           road_speed_limit_offset *= CV.KPH_TO_MPH
         limit_speed = self.nRoadLimitSpeed + road_speed_limit_offset
+
+    # 문제시 원복 (재억 질문 2026-08-30) - limit_speed(도로 규정속도)가 80->60처럼
+    # 확 낮아질 때 즉시 그대로 반영되던 걸, 초당 ROAD_LIMIT_SPEED_MAX_DECEL_RATE
+    # km/h까지만 낮아지도록 완충. 이 함수는 20Hz(0.05초 간격)로 도니까 한 틱당
+    # 그 값의 1/20만 적용. 값이 올라가는 쪽(제한 완화, 200 기본값 포함)은 안전과
+    # 무관해서 즉시 반영. 카메라/방지턱은 이미 거리기반 감속곡선이 있어 그대로 둠.
+    ROAD_LIMIT_SPEED_MAX_DECEL_RATE = 4.0  # km/h per second
+    max_decrease_per_tick = ROAD_LIMIT_SPEED_MAX_DECEL_RATE / 20.0
+    if limit_speed < self.limit_speed_filtered:
+      self.limit_speed_filtered = max(limit_speed, self.limit_speed_filtered - max_decrease_per_tick)
+    else:
+      self.limit_speed_filtered = limit_speed
+    limit_speed = self.limit_speed_filtered
 
     if self.active_carrot <= 1:
       self.xSpdType = self.navType = self.xTurnInfo = self.xTurnInfoNext = -1
