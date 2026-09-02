@@ -675,21 +675,17 @@ def _make_ccnc_values(values, CS, lat_active, frame, hud_control,
       _apply_lane_desire(values, desire)
 
   if corner_radar:
-    # v: 재억 요청(2026-08-26) - "트럭이면 트럭, 오토바이면 오토바이가 실제로 나오게" -
-    # 고정값(CAR_MODEL_ID)으로 항상 덮어쓰지 말고, 카메라가 원래 감지한 실제 종류값을
-    # 그대로 재사용. 값이 0(감지없음)이면 기존처럼 CAR_MODEL_ID로 대체(항상 표시 유지). #문제시 원복
     radar_all = [
-      ('LF_DETECT', 'LF_DETECT_DISTANCE', 'lf_detect_type'),
-      ('RF_DETECT', 'RF_DETECT_DISTANCE', 'rf_detect_type'),
-      ('LR_DETECT', 'LR_DETECT_DISTANCE', 'lr_detect_type'),
-      ('RR_DETECT', 'RR_DETECT_DISTANCE', 'rr_detect_type'),
+      ('LF_DETECT', 'LF_DETECT_DISTANCE'),
+      ('RF_DETECT', 'RF_DETECT_DISTANCE'),
+      ('LR_DETECT', 'LR_DETECT_DISTANCE'),
+      ('RR_DETECT', 'RR_DETECT_DISTANCE'),
     ]
-    for det_key, dist_key, type_attr in radar_all:
+    for det_key, dist_key in radar_all:
       #문제시 원복
       #if values[det_key] >= 4 and values[dist_key] != 0:
       #  values[det_key] = 1
-      original_type = getattr(CS, type_attr, 0)
-      values[det_key] = original_type if original_type > 0 else CAR_MODEL_ID  # LKA off 시에도 카메라 원본값과 무관하게 항상 표시 (당근 c3-wip: 3D 모델 반영)
+      values[det_key] = CAR_MODEL_ID  # LKA off 시에도 카메라 원본값과 무관하게 항상 표시 (당근 c3-wip: 3D 모델 반영)
 
     if blink_pairs:
       _apply_radar_blink(values, blink_pairs, frame, t=blink_t)

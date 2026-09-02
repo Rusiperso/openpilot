@@ -109,11 +109,6 @@ class CarState(CarStateBase):
     self.adrv_0x1ea = None
     self.adrv_0x160 = None
     self.ccnc_0x162 = None    
-    # v: 재억 요청(2026-08-26) - 카메라 원본 감지종류값 저장용 초기값(감지 없음=0). #문제시 원복
-    self.lf_detect_type = 0
-    self.rf_detect_type = 0
-    self.lr_detect_type = 0
-    self.rr_detect_type = 0
     self.hda_info_4a3 = None    
     self.tcs = None    
     self.mdps = None
@@ -614,13 +609,6 @@ class CarState(CarStateBase):
       self.rr_distance = self.ccnc_0x162["RR_DETECT_DISTANCE"]
       ret.leftLatDist = self.ccnc_0x162["LF_DETECT_LATERAL"]
       ret.rightLatDist = self.ccnc_0x162["RF_DETECT_LATERAL"]
-      # v: 재억 요청(2026-08-26) - "트럭이면 트럭, 오토바이면 오토바이가 실제로 나오게" -
-      # openpilot이 고정값(CAR_MODEL_ID)으로 덮어쓰지 말고, 카메라가 원래 보내던 실제
-      # 감지 종류값을 그대로 저장해뒀다가 carcontroller에서 재사용. #문제시 원복
-      self.lf_detect_type = self.ccnc_0x162["LF_DETECT"]
-      self.rf_detect_type = self.ccnc_0x162["RF_DETECT"]
-      self.lr_detect_type = self.ccnc_0x162["LR_DETECT"]
-      self.rr_detect_type = self.ccnc_0x162["RR_DETECT"]
       corner = True
     if self.adrv_0x1ea is not None:
       if not corner:
@@ -630,10 +618,6 @@ class CarState(CarStateBase):
         self.rr_distance = self.adrv_0x1ea["RR_DETECT_DISTANCE"]
         ret.leftLatDist = self.adrv_0x1ea["LF_DETECT_LATERAL"]
         ret.rightLatDist = self.adrv_0x1ea["RF_DETECT_LATERAL"]
-        self.lf_detect_type = self.adrv_0x1ea["LF_DETECT"]
-        self.rf_detect_type = self.adrv_0x1ea["RF_DETECT"]
-        self.lr_detect_type = self.adrv_0x1ea["LR_DETECT"]
-        self.rr_detect_type = self.adrv_0x1ea["RR_DETECT"]
         corner = True
     if corner:
       left_block = True if 0 < ret.leftLongDist < 7.0 or 0 < self.lr_distance < 7.0 else False
