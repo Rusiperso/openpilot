@@ -245,6 +245,9 @@ class VCruiseCarrot:
     if self.frame % 10 == 0:
       self.autoCruiseControl = self.params.get_int("AutoCruiseControl") * unit_factor
       self.autoGasTokSpeed = self.params.get_int("AutoGasTokSpeed") * unit_factor
+      # 문제시 원복 (재억 요청 2026-09-05) - 악셀 톡으로 크루즈 설정속도가 올라가는
+      # 동작을 아예 끌 수 있는 설정. 1=기존대로 올림(기본), 0=안 올림.
+      self.autoGasTokCruiseUp = self.params.get_int("AutoGasTokCruiseUp")
       self.autoGasSyncSpeed = self.params.get_int("AutoGasSyncSpeed")
       self.applyModelSpeed = self.params.get_float("ApplyModelSpeed") * 0.01
       self.autoSpeedUptoRoadSpeedLimit = self.params.get_float("AutoSpeedUptoRoadSpeedLimit") * 0.01
@@ -714,7 +717,14 @@ class VCruiseCarrot:
         if self.v_ego_kph_set > v_cruise_kph:
           v_cruise_kph = self.v_ego_kph_set
       else:
-        v_cruise_kph = self._v_cruise_desired(CS, v_cruise_kph)
+        # 문제시 원복 (재억 요청 2026-09-05: "잘 가다가 악셀 살짝 밟았다 떼면 10키로가
+        # 올라가는데 이거 기능 끌 수 없나" - AutoGasTokSpeed를 0으로 두면 오히려 모든
+        # 속도에서 항상 켜지는 구조라 끌 방법이 없었음. 수치 조절이 아니라 아예 끄고
+        # 싶다는 요청이라, 크루즈가 켜진 상태에서 악셀 톡으로 설정속도를 올리는 이 동작만
+        # 따로 끌 수 있는 설정 추가. 크루즈가 꺼져 있을 때 악셀 톡으로 크루즈를 켜주는
+        # 위쪽 동작은 그대로 둠)
+        if self.autoGasTokCruiseUp:
+          v_cruise_kph = self._v_cruise_desired(CS, v_cruise_kph)
     elif self._gas_pressed_count == -1:
       if 0 < self.d_rel < CS.vEgo * 0.8:
         if CS.vEgo < 1.0:

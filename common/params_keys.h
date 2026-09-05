@@ -183,6 +183,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"CarrotTunerFactoryReset", {PERSISTENT, BOOL, "0"}},      // Auto-Tuner: 튜닝 파라미터 공장초기화 신호
 
     {"AutoGasTokSpeed", {PERSISTENT, INT, "0"}},
+    {"AutoGasTokCruiseUp", {PERSISTENT, INT, "1"}},
     {"AutoGasSyncSpeed", {PERSISTENT, INT, "0"} },
     {"ApplyModelSpeed", {PERSISTENT, INT, "0"} },
     {"AutoEngage", {PERSISTENT, INT, "2"}},
