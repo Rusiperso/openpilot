@@ -1165,7 +1165,14 @@ protected:
             case 3: ui_draw_image(s, { bx - icon_size / 2, by - icon_size / 2, icon_size, icon_size }, "ic_lane_change_l", 1.0f); break;
             case 4: ui_draw_image(s, { bx - icon_size / 2, by - icon_size / 2, icon_size, icon_size }, "ic_lane_change_r", 1.0f); break;
             case 7: ui_draw_image(s, { bx - icon_size / 2, by - icon_size / 2, icon_size, icon_size }, "ic_turn_u", 1.0f); break;
-            case 5: ui_draw_image(s, { bx - icon_size / 2, by - icon_size / 2, icon_size, icon_size }, "ic_rotary", 1.0f); break;
+            case 5: {
+                // v: 재억 요청(2026-09-06, 사진으로 확인) - 로터리 아이콘이 다른 화살표
+                // 아이콘들보다 유독 커 보인다고 해서, 톨게이트(case 6)와 동일한 방식으로
+                // 이것만 별도로 작게(70%) 줄임. #문제시 원복
+                int rotary_size = icon_size * 0.7f;
+                ui_draw_image(s, { bx - rotary_size / 2, by - rotary_size / 2, rotary_size, rotary_size }, "ic_rotary", 1.0f);
+                break;
+            }
             case 6:
                 // v: 재억 요청 - 톨게이트(TG) 아이콘이 박스를 넘어가서 위 텍스트를 가림.
                 // 다른 아이콘들과 그림 크기(256x256)는 같은데 유독 이것만 커보인다고 해서,
