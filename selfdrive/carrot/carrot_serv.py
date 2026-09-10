@@ -411,12 +411,17 @@ class CarrotServ:
     # 카카오 기준 진출 방향 6단계)를 각도로 바꿔서 xTurnModifier에 담아 화면(carrot.cc)까지
     # 전달 - 원 모양 + 진입/진출 방향을 보여주는 아이콘을 그릴 수 있게 함. TmapNda
     # 오버레이와 같은 상대 좌표계(0=직진/12시, 시계방향). #문제시 원복
-    rotary_modifier_to_angle = {
-      "straight": 0, "slight right": 45, "right": 90, "sharp right": 135,
-      "sharp left": 225, "left": 270, "slight left": 315,
+    # v: 재억 지적(2026-09-10) - navModifier 문자열(6~7단계)로 매핑하면 TmapNda가 실제로
+    # 구분해서 보내는 8방향 중 138(S, 왼쪽 급커브)과 136(SW, 왼쪽아래 급커브)이 둘 다
+    # "sharp left"로 겹쳐서 서로 다른 방향인데 같은 아이콘이 떴음. TmapNda
+    # KakaoGuidanceDelegate가 8방향마다 이미 고정된 코드 하나씩만 보내므로(else 분기
+    # 포함) 문자열 대신 원본 숫자 코드에서 직접 8방향 각도로 매핑해 정밀도를 살림. #문제시 원복
+    rotary_code_to_angle = {
+      131: 45, 133: 90, 134: 135, 138: 180,
+      136: 225, 139: 270, 140: 315, 142: 0,
     }
     if self.xTurnInfo == 5:
-      self.xTurnModifier = rotary_modifier_to_angle.get(self.navModifier, -999)
+      self.xTurnModifier = rotary_code_to_angle.get(self.nTBTTurnType, -999)
     else:
       self.xTurnModifier = -999
 
