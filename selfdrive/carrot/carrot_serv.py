@@ -172,6 +172,7 @@ class CarrotServ:
     self.xSpdType = -1
 
     self.xTurnInfo = -1
+    self.xTurnModifier = -999
     self.xDistToTurn = 0
     self.xTurnInfoNext = -1
     self.xDistToTurnNext = 0
@@ -404,6 +405,20 @@ class CarrotServ:
       self.navType, self.navModifier, self.xTurnInfo = turn_type_mapping[self.nTBTTurnType]
     else:
       self.navType, self.navModifier, self.xTurnInfo = "invalid", "", -1
+
+    # v: 신규기능(재억 요청, 2026-09-10) - 로터리(xTurnInfo=5) 아이콘이 지금까지 방향
+    # 상관없이 똑같은 그림 하나만 떴음. navModifier(위 turn_type_mapping이 이미 계산해둔
+    # 카카오 기준 진출 방향 6단계)를 각도로 바꿔서 xTurnModifier에 담아 화면(carrot.cc)까지
+    # 전달 - 원 모양 + 진입/진출 방향을 보여주는 아이콘을 그릴 수 있게 함. TmapNda
+    # 오버레이와 같은 상대 좌표계(0=직진/12시, 시계방향). #문제시 원복
+    rotary_modifier_to_angle = {
+      "straight": 0, "slight right": 45, "right": 90, "sharp right": 135,
+      "sharp left": 225, "left": 270, "slight left": 315,
+    }
+    if self.xTurnInfo == 5:
+      self.xTurnModifier = rotary_modifier_to_angle.get(self.navModifier, -999)
+    else:
+      self.xTurnModifier = -999
 
     if self.nTBTTurnTypeNext in turn_type_mapping:
       self.navTypeNext, self.navModifierNext, self.xTurnInfoNext = turn_type_mapping[self.nTBTTurnTypeNext]
@@ -821,6 +836,7 @@ class CarrotServ:
       self.xDistToTurn = int(msg_nav.maneuverDistance)
       self.szTBTMainText = msg_nav.maneuverPrimaryText
       self.xTurnInfo = -1
+      self.xTurnModifier = -999  # 이 경로(openpilot 자체 내비)엔 로터리 각도 정보가 없음
       for key, value in nav_type_mapping.items():
         if value[0] == msg_nav.maneuverType and value[1] == msg_nav.maneuverModifier:
           self.xTurnInfo = value[2]
@@ -930,6 +946,7 @@ class CarrotServ:
 
     if self.active_carrot <= 1:
       self.xSpdType = self.navType = self.xTurnInfo = self.xTurnInfoNext = -1
+      self.xTurnModifier = -999
       self.nSdiType = self.nSdiBlockType = self.nSdiPlusBlockType = -1
       self.nTBTTurnType = self.nTBTTurnTypeNext = -1
       self.roadcate = 8
@@ -944,6 +961,7 @@ class CarrotServ:
       if self.xDistToTurn > 0:
         self.xDistToTurn = 0
       self.xTurnInfo = -1
+      self.xTurnModifier = -999
       self.xDistToTurnNext = 0
       self.xTurnInfoNext = -1
 
@@ -1085,6 +1103,7 @@ class CarrotServ:
     msg.carrotMan.xSpdDist = int(self.xSpdDist)
     msg.carrotMan.xSpdCountDown = int(left_spd_sec)
     msg.carrotMan.xTurnInfo = int(self.xTurnInfo)
+    msg.carrotMan.xTurnModifier = int(self.xTurnModifier)
     msg.carrotMan.xDistToTurn = int(self.xDistToTurn)
     msg.carrotMan.xTurnCountDown = int(left_tbt_sec)
     msg.carrotMan.atcType = self.atcType

@@ -968,6 +968,7 @@ private:
     int xSpdDist = 0;
     int xSignType = -1;
     int xTurnInfo = -1;
+    int xTurnModifier = -999;
     int xDistToTurn = 0;
     int nRoadLimitSpeed = 20;
     int active_carrot = 0;
@@ -1115,6 +1116,76 @@ protected:
             }
         }
 	}
+    /**
+     * v: 신규기능(재억 요청, 2026-09-10) - 로터리(xTurnInfo=5) 아이콘이 지금까지 방향
+     * 상관없이 똑같은 그림 하나만 떴음(ic_rotary 고정). TmapNda 안드로이드 오버레이와
+     * 같은 방식 - 원(로터리) + 진입(6시 고정, 상대 좌표계라 실제 어느 방향에서 왔든
+     * 이 기준이 맞음) + 진출 스포크(바깥으로 뻗는 짧은 선+화살촉, exitAngleDeg 그대로
+     * 가리킴)로 그림. 우측통행이라 로터리는 반시계로 돌아서, 진입->출구 호도 반시계
+     * 방향(NVG_CCW)으로 그림. exitAngleDeg가 -999(값 없음/구버전 데이터)면 호출 쪽에서
+     * 기존 정지 이미지(ic_rotary)로 대체해야 함. #문제시 원복
+     */
+    void drawRoundaboutIcon(const UIState* s, float bx, float by, float size, float exitAngleDeg, NVGcolor color) {
+      NVGcontext* vg = s->vg;
+      float r = size * 0.26f;
+      float strokeW = size * 0.10f;
+      float entryAngle = 180.0f;
+      float exitAngle = fmodf(fmodf(exitAngleDeg, 360.0f) + 360.0f, 360.0f);
+      float sweep = fmodf(fmodf(entryAngle - exitAngle, 360.0f) + 360.0f, 360.0f); // 반시계 회전각
+      if (sweep < 20.0f) sweep = 20.0f;
+
+      auto toRad = [](float a) { return (a - 90.0f) * (float)M_PI / 180.0f; };
+      auto px = [&](float a, float rad) { return bx + rad * cosf(toRad(a)); };
+      auto py = [&](float a, float rad) { return by + rad * sinf(toRad(a)); };
+
+      // 로터리 테두리(연하게)
+      nvgBeginPath(vg);
+      nvgCircle(vg, bx, by, r);
+      nvgStrokeColor(vg, nvgRGBAf(color.r, color.g, color.b, 0.27f));
+      nvgStrokeWidth(vg, strokeW * 0.5f);
+      nvgStroke(vg);
+
+      nvgLineCap(vg, NVG_ROUND);
+      nvgStrokeColor(vg, color);
+      nvgStrokeWidth(vg, strokeW);
+
+      // 진입 표시(짧은 꼬리)
+      nvgBeginPath(vg);
+      nvgMoveTo(vg, px(entryAngle, r * 1.5f), py(entryAngle, r * 1.5f));
+      nvgLineTo(vg, px(entryAngle, r), py(entryAngle, r));
+      nvgStroke(vg);
+
+      // 진입 -> 출구, 반시계 방향 호
+      nvgBeginPath(vg);
+      nvgMoveTo(vg, px(entryAngle, r), py(entryAngle, r));
+      nvgArc(vg, bx, by, r, toRad(entryAngle), toRad(entryAngle - sweep), NVG_CCW);
+      nvgStroke(vg);
+
+      // 출구 스포크(그 각도를 그대로 가리킴)
+      float exitOuterX = px(exitAngle, r * 1.55f);
+      float exitOuterY = py(exitAngle, r * 1.55f);
+      nvgBeginPath(vg);
+      nvgMoveTo(vg, px(exitAngle, r), py(exitAngle, r));
+      nvgLineTo(vg, exitOuterX, exitOuterY);
+      nvgStroke(vg);
+
+      // 화살촉
+      float headLen = strokeW * 2.0f;
+      float outRad = toRad(exitAngle);
+      float dirX = cosf(outRad), dirY = sinf(outRad);
+      float perpX = -dirY, perpY = dirX;
+      float backX = exitOuterX - dirX * headLen;
+      float backY = exitOuterY - dirY * headLen;
+      float spread = headLen * 0.6f;
+      nvgBeginPath(vg);
+      nvgMoveTo(vg, exitOuterX, exitOuterY);
+      nvgLineTo(vg, backX + perpX * spread, backY + perpY * spread);
+      nvgLineTo(vg, backX - perpX * spread, backY - perpY * spread);
+      nvgClosePath(vg);
+      nvgFillColor(vg, color);
+      nvgFill(vg);
+    }
+
     int  drawTurnInfoHud(const UIState* s) {
       if (s->fb_w < 1200) return -1;
 #ifdef __UI_TEST
@@ -1170,7 +1241,14 @@ protected:
                 // 아이콘들보다 유독 커 보인다고 해서, 톨게이트(case 6)와 동일한 방식으로
                 // 이것만 별도로 작게(70%) 줄임. #문제시 원복
                 int rotary_size = icon_size * 0.7f;
-                ui_draw_image(s, { bx - rotary_size / 2, by - rotary_size / 2, rotary_size, rotary_size }, "ic_rotary", 1.0f);
+                // v: 신규기능(재억 요청, 2026-09-10) - xTurnModifier(진출 각도)가 있으면
+                // 방향이 표시되는 아이콘으로, 없으면(-999, 구버전 데이터 등) 기존 정지
+                // 이미지로 대체. #문제시 원복
+                if (xTurnModifier > -999) {
+                  drawRoundaboutIcon(s, bx, by, (float)rotary_size, (float)xTurnModifier, COLOR_WHITE);
+                } else {
+                  ui_draw_image(s, { bx - rotary_size / 2, by - rotary_size / 2, rotary_size, rotary_size }, "ic_rotary", 1.0f);
+                }
                 break;
             }
             case 6:
@@ -1271,6 +1349,7 @@ public:
           xSignType = 0;
         }
         xTurnInfo = carrot_man.getXTurnInfo();
+        xTurnModifier = carrot_man.getXTurnModifier();
         xDistToTurn = carrot_man.getXDistToTurn();
         nRoadLimitSpeed = carrot_man.getNRoadLimitSpeed();
         if (active_carrot > 1 || carrot_man.getNGoPosDist() > 0) {
