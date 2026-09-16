@@ -1316,7 +1316,14 @@ protected:
             local->tm_min += remaining_minutes;
             mktime(local);
             bool is_kor = s->language == "main_ko";
-            sprintf(str, "%s: %.1f%s(%02d:%02d)", (is_kor)?"도착":"ETA", (float)nGoPosTime / 60., (is_kor)?"분":"MIN", local->tm_hour, local->tm_min);
+            int eta_hours = remaining_minutes / 60;
+            int eta_mins = remaining_minutes % 60;
+            // v: 재억 요청(2026-09-16) - 60분 넘으면 "73분" 대신 "1시간 13분"으로 보이게 함. #문제시 원복
+            if (eta_hours > 0) {
+              sprintf(str, "%s: %d%s %d%s(%02d:%02d)", (is_kor)?"도착":"ETA", eta_hours, (is_kor)?"시간":"h", eta_mins, (is_kor)?"분":"min", local->tm_hour, local->tm_min);
+            } else {
+              sprintf(str, "%s: %d%s(%02d:%02d)", (is_kor)?"도착":"ETA", eta_mins, (is_kor)?"분":"MIN", local->tm_hour, local->tm_min);
+            }
             // v: 재억 요청(2026-08-22) - "도착:X분(HH:MM)"/거리 글씨를 키움. 아래쪽(+200)의
             // 방지턱/카메라 아이콘, 제일 아래쪽 안내줄(szTBTMainText, -15)과 겹치지 않게
             // 50→58 정도로만 키우고 y좌표도 살짝만 벌림. #문제시 원복
