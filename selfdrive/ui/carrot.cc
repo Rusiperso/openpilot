@@ -1258,6 +1258,30 @@ protected:
                 ui_draw_image(s, { bx - (int)(icon_size * 0.35), by - (int)(icon_size * 0.35), (int)(icon_size * 0.7), (int)(icon_size * 0.7) }, "ic_tollgate", 1.0f);
                 break;
             case 8: ui_draw_image(s, { bx - icon_size / 2, by - icon_size / 2, icon_size, icon_size }, "ic_destination", 1.0f); break;
+            case 9: {
+                // v: 재억 요청(2026-09-19) - 직진 화살표. 좌/우회전(ic_turn_l/r)처럼
+                // 그림 파일을 새로 추가하는 대신, 세로선 + 삼각형 화살촉을 NanoVG로
+                // 직접 그려서(위쪽이 화살촉, 다른 화면의 "↑" 직진 표시와 같은 방향)
+                // 새 이미지 에셋 없이 바로 적용 가능하게 함. #문제시 원복
+                float aw = icon_size * 0.5f;
+                float ah = icon_size * 0.7f;
+                float neckY = by - ah / 2 + aw * 0.5f;
+                nvgBeginPath(s->vg);
+                nvgMoveTo(s->vg, bx, by + ah / 2);
+                nvgLineTo(s->vg, bx, neckY);
+                nvgStrokeColor(s->vg, COLOR_WHITE);
+                nvgStrokeWidth(s->vg, aw * 0.22f);
+                nvgLineCap(s->vg, NVG_ROUND);
+                nvgStroke(s->vg);
+                nvgBeginPath(s->vg);
+                nvgMoveTo(s->vg, bx - aw / 2, neckY);
+                nvgLineTo(s->vg, bx + aw / 2, neckY);
+                nvgLineTo(s->vg, bx, by - ah / 2);
+                nvgClosePath(s->vg);
+                nvgFillColor(s->vg, COLOR_WHITE);
+                nvgFill(s->vg);
+                break;
+            }
             default:
                 sprintf(str, "감속:%d", xTurnInfo);
                 ui_draw_text(s, bx, by + 20, str, 35, COLOR_WHITE, BOLD);
