@@ -391,10 +391,10 @@ class CarrotServ:
       142: ("rotary", "straight", 5),
       14: ("turn", "uturn", 7),
       201: ("arrive", "straight", 8),
-      // v: 재억 요청(2026-09-19) - "좌/우회전은 화살표 뜨는데 직진만 안 뜬다"는 지적으로
-      // 추가. TmapNda(KakaoGuidanceDelegate.mapKakaoTurnTypeToOpenpilot)에서 카카오의
-      // 실제 직진 안내를 11로 보내주면 여기서 xTurnInfo=9(직진 아이콘, carrot.cc에 새로
-      // 추가)로 매핑함. #문제시 원복
+      # v: 재억 요청(2026-09-19) - "좌/우회전은 화살표 뜨는데 직진만 안 뜬다"는 지적으로
+      # 추가. TmapNda(KakaoGuidanceDelegate.mapKakaoTurnTypeToOpenpilot)에서 카카오의
+      # 실제 직진 안내를 11로 보내주면 여기서 xTurnInfo=9(직진 아이콘, carrot.cc에 새로
+      # 추가)로 매핑함. #문제시 원복
       11: ("straight", "straight", 9),
       51: ("notification", "straight", 0),
       52: ("notification", "straight", 0),
