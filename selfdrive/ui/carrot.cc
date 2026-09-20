@@ -1297,7 +1297,8 @@ protected:
             // v: 재억 요청(2026-09-20) - 기본 직진 화살표는 특정 회전 지점을 가리키는 게
             // 아니라서 그 밑에 "얼마 남았다"는 거리 숫자를 넣을 근거가 없음(xDistToTurn은
             // 예전 회전 지점의 낡은 값일 수 있음) - 진짜 회전/시설 정보일 때만 거리 표시. #문제시 원복
-            if (!isDefaultStraight) {
+            // v: 재억 요청(2026-09-20) - 직진 화살표 밑에도 다음 안내 지점까지 거리 표시(carrot_serv가 직진일 때도 nTBTDist로 갱신). #문제시 원복
+            if (!isDefaultStraight || xDistToTurn > 0) {
               if (s->scene.is_metric) {
                 if (xDistToTurn < 1000) sprintf(str, "%d m", xDistToTurn);
                 else  sprintf(str, "%.1f km", xDistToTurn / 1000.f);

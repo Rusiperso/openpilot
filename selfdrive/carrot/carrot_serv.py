@@ -439,7 +439,7 @@ class CarrotServ:
     else:
       self.navTypeNext, self.navModifierNext, self.xTurnInfoNext = "invalid", "", -1
 
-    if self.nTBTDist > 0 and self.xTurnInfo > 0:
+    if self.nTBTDist > 0 and self.xTurnInfo >= 0:
       self.xDistToTurn = self.nTBTDist
     if self.nTBTDistNext > 0 and self.xTurnInfoNext > 0:
       self.xDistToTurnNext = self.nTBTDistNext + self.nTBTDist
@@ -971,7 +971,8 @@ class CarrotServ:
     if self.xSpdType < 0 or (self.xSpdType not in [100,101] and self.xSpdDist <= 0) or (self.xSpdType in [100,101] and self.xSpdDist < -250):
       self.xSpdType = -1
       self.xSpdDist = self.xSpdLimit = 0
-    if self.xTurnInfo < 0 or self.xDistToTurn < -50:
+    # 직진(xTurnInfo==0)은 남은 거리를 갱신하지 않아 계속 줄어 -50 밑으로 가므로, 그때 지우면 직진 화살표가 순간만 뜨고 사라짐
+    if self.xTurnInfo < 0 or (self.xTurnInfo != 0 and self.xDistToTurn < -50):
       if self.xDistToTurn > 0:
         self.xDistToTurn = 0
       self.xTurnInfo = -1
