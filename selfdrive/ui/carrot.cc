@@ -1222,7 +1222,14 @@ protected:
           //ui_draw_text(s, tbt_x + 190, tbt_y - 5, szPosRoadName.toStdString().c_str(), 40, COLOR_WHITE, BOLD);
         }
 
-        if(xTurnInfo > 0) {
+        // v: 재억 요청(2026-09-20) - "직진일 땐 카카오가 아예 신호를 안 보낸다"는 걸
+        // 로그로 확인함(좌/우회전처럼 맞춰서 매핑할 이름 자체가 없음). 그래서 방식을
+        // 뒤집음 - "특정 신호가 오면 화살표를 켠다"가 아니라 "안내 중(nGoPosDist>0)인데
+        // 딱히 정해진 회전 정보가 없으면(xTurnInfo==0) 기본으로 직진 화살표를 보여주고,
+        // 좌/우회전 등 진짜 신호가 오면 그걸로 바꿔치기"하는 식으로 변경. #문제시 원복
+        if(xTurnInfo > 0 || (xTurnInfo == 0 && nGoPosDist > 0)) {
+            bool isDefaultStraight = (xTurnInfo == 0);
+            int drawTurnInfo = isDefaultStraight ? 9 : xTurnInfo;
             nvgTextAlign(s->vg, NVG_ALIGN_CENTER | NVG_ALIGN_BOTTOM);
             int bx = tbt_x + 100;
             int by = tbt_y + 85;
@@ -1230,7 +1237,7 @@ protected:
               stroke_color = COLOR_BLACK;
               ui_fill_rect(s->vg, { bx - 80, by - 90, 160, 230 }, atc_type.contains("prepare")?COLOR_GREEN_ALPHA(100) : COLOR_GREEN, 15, 1.0f, &stroke_color);
             }
-            switch (xTurnInfo) {
+            switch (drawTurnInfo) {
             case 1: ui_draw_image(s, { bx - icon_size / 2, by - icon_size / 2, icon_size, icon_size }, "ic_turn_l", 1.0f); break;
             case 2: ui_draw_image(s, { bx - icon_size / 2, by - icon_size / 2, icon_size, icon_size }, "ic_turn_r", 1.0f); break;
             case 3: ui_draw_image(s, { bx - icon_size / 2, by - icon_size / 2, icon_size, icon_size }, "ic_lane_change_l", 1.0f); break;
@@ -1287,15 +1294,20 @@ protected:
                 ui_draw_text(s, bx, by + 20, str, 35, COLOR_WHITE, BOLD);
                 break;
             }
-            if (s->scene.is_metric) {
-              if (xDistToTurn < 1000) sprintf(str, "%d m", xDistToTurn);
-              else  sprintf(str, "%.1f km", xDistToTurn / 1000.f);
+            // v: 재억 요청(2026-09-20) - 기본 직진 화살표는 특정 회전 지점을 가리키는 게
+            // 아니라서 그 밑에 "얼마 남았다"는 거리 숫자를 넣을 근거가 없음(xDistToTurn은
+            // 예전 회전 지점의 낡은 값일 수 있음) - 진짜 회전/시설 정보일 때만 거리 표시. #문제시 원복
+            if (!isDefaultStraight) {
+              if (s->scene.is_metric) {
+                if (xDistToTurn < 1000) sprintf(str, "%d m", xDistToTurn);
+                else  sprintf(str, "%.1f km", xDistToTurn / 1000.f);
+              }
+              else {
+                if (xDistToTurn < 1609) sprintf(str, "%d ft", (int)(xDistToTurn * 3.28084));
+                else sprintf(str, "%.1f mi", xDistToTurn / 1609.344f);
+              }
+              ui_draw_text(s, bx, by + 120, str, 40, COLOR_WHITE, BOLD);
             }
-            else {
-              if (xDistToTurn < 1609) sprintf(str, "%d ft", (int)(xDistToTurn * 3.28084));
-              else sprintf(str, "%.1f mi", xDistToTurn / 1609.344f);
-            }
-            ui_draw_text(s, bx, by + 120, str, 40, COLOR_WHITE, BOLD);
         }
         nvgTextAlign(s->vg, NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM);
         if (xSignType > 0 && xSpdDist > 0) {
