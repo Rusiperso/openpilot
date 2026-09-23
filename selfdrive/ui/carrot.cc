@@ -1270,8 +1270,12 @@ protected:
                 // 그림 파일을 새로 추가하는 대신, 세로선 + 삼각형 화살촉을 NanoVG로
                 // 직접 그려서(위쪽이 화살촉, 다른 화면의 "↑" 직진 표시와 같은 방향)
                 // 새 이미지 에셋 없이 바로 적용 가능하게 함. #문제시 원복
-                float aw = icon_size * 0.5f;
-                float ah = icon_size * 0.7f;
+                // v: 재억 요청(2026-09-23) - 다른 방향 아이콘(그림 파일, 안에 여백이 있는
+                // png)보다 이 직진 화살표(꽉 채운 도형)가 훨씬 커 보인다는 지적. 로터리/
+                // 톨게이트(case 5/6)와 같은 방식으로 전체 크기를 70%로 줄여서 맞춤. #문제시 원복
+                float straight_size = icon_size * 0.7f;
+                float aw = straight_size * 0.5f;
+                float ah = straight_size * 0.7f;
                 float neckY = by - ah / 2 + aw * 0.5f;
                 nvgBeginPath(s->vg);
                 nvgMoveTo(s->vg, bx, by + ah / 2);

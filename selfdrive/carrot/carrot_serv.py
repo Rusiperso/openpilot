@@ -972,10 +972,15 @@ class CarrotServ:
       self.xSpdType = -1
       self.xSpdDist = self.xSpdLimit = 0
     # 직진(xTurnInfo==0)은 남은 거리를 갱신하지 않아 계속 줄어 -50 밑으로 가므로, 그때 지우면 직진 화살표가 순간만 뜨고 사라짐
+    # v: 재억 요청(2026-09-23) - 회전 지점을 지났는데 카카오가 다음 안내를 아직 안 줘서
+    # 여기로 들어오면, 예전엔 xTurnInfo=-1(화면에 아무것도 안 뜸)로 지웠음. 그러면 다음
+    # 실제 안내가 올 때까지 화면이 통째로 비어보이는 공백 구간이 생김(사진으로 확인됨).
+    # -1 대신 0(기본 직진)으로 두면 carrot.cc가 이 경우도 직진 화살표로 그려주므로,
+    # 공백 없이 "다음 안내 오기 전까지는 직진"으로 자연스럽게 이어짐. #문제시 원복
     if self.xTurnInfo < 0 or (self.xTurnInfo != 0 and self.xDistToTurn < -50):
       if self.xDistToTurn > 0:
         self.xDistToTurn = 0
-      self.xTurnInfo = -1
+      self.xTurnInfo = 0
       self.xTurnModifier = -999
       self.xDistToTurnNext = 0
       self.xTurnInfoNext = -1
