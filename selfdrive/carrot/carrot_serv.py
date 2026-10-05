@@ -114,6 +114,7 @@ class CarrotServ:
     self.szNearDirName = ""
     self.szFarDirName = ""
     self.nTBTNextRoadWidth = 0
+    self.nRoadClass = -1   # TmapNda가 보내는 도로 종류(0,1=고속)
 
     self.nTBTDistNext = 0
     self.nTBTTurnTypeNext = -1
@@ -772,6 +773,11 @@ class CarrotServ:
     fork_dist_for_speed = self.autoTurnControlTurnEnd * fork_speed / 3.6 # 5
     stop_dist_for_speed = 5
     start_fork_dist = np.interp(self.nRoadLimitSpeed, [30, 50, 100], [160, 200, 350])
+    # 재억 요청: 고속도로 진출은 2km 전부터, 시내는 1km 전부터 반응
+    if self.nRoadClass in (0, 1):
+      start_fork_dist = max(start_fork_dist, 2000)
+    else:
+      start_fork_dist = max(start_fork_dist, 1000)
     start_turn_dist = np.interp(self.nTBTNextRoadWidth, [5, 10], [43, 60])
     turn_info_mapping = {
         1: {"type": "turn left", "speed": turn_speed, "dist": turn_dist_for_speed, "start": start_fork_dist},
@@ -1336,6 +1342,7 @@ class CarrotServ:
       self.szFarDirName = _s(json.get("szFarDirName"))
 
       self.nTBTNextRoadWidth = int(json.get("nTBTNextRoadWidth", 0))
+      self.nRoadClass = _i(json.get("nRoadClass"), -1)
       self.nTBTDistNext = int(json.get("nTBTDistNext", 0))
       self.nTBTTurnTypeNext = int(json.get("nTBTTurnTypeNext", -1))
       self.szTBTMainTextNext = json.get("szTBTMainText", "")
