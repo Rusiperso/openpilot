@@ -774,12 +774,14 @@ class CarrotServ:
     fork_dist_for_speed = self.autoTurnControlTurnEnd * fork_speed / 3.6 # 5
     stop_dist_for_speed = 5
     start_fork_dist = np.interp(self.nRoadLimitSpeed, [30, 50, 100], [160, 200, 350])
-    # 재억 요청: 고속도로 진출은 2km 전부터, 시내는 1km 전부터 반응
+    # 재억 요청: 자동 길안내 주행은 제한속도 80 이상 도로(고속도로·도시고속도로·고속화도로)에서만,
+    # 진출은 2km 전부터 반응. 시내(80 미만)에서는 갈림길 자동 차선변경 안 함.
+    auto_navi_city = False
     if self.autoNaviDrive == 1:
-      if self.nRoadClass in (0, 1):
+      if self.nRoadLimitSpeed >= 80:
         start_fork_dist = max(start_fork_dist, 2000)
       else:
-        start_fork_dist = max(start_fork_dist, 1000)
+        auto_navi_city = True
     start_turn_dist = np.interp(self.nTBTNextRoadWidth, [5, 10], [43, 60])
     turn_info_mapping = {
         1: {"type": "turn left", "speed": turn_speed, "dist": turn_dist_for_speed, "start": start_fork_dist},
@@ -797,6 +799,8 @@ class CarrotServ:
     mapping = turn_info_mapping.get(x_turn_info, default_mapping)
 
     atc_type = mapping["type"]
+    if auto_navi_city and atc_type in ("fork left", "fork right"):
+      atc_type += " prepare"  # 시내(80 미만)는 자동 길안내의 갈림길 차선변경 제외(회전·운전자 깜빡이는 그대로)
     atc_speed = mapping["speed"]
     atc_dist = mapping["dist"]
     atc_start_dist = mapping["start"]

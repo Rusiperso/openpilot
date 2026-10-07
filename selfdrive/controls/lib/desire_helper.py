@@ -243,6 +243,9 @@ class DesireHelper:
     # 선택된 side (FSM은 이 side만 참고)
     side = self._get_selected_side(blinker_state) if blinker_state in (BLINKER_LEFT, BLINKER_RIGHT) else None
 
+    # 갈림길(fork) ATC는 운전자 깜빡이 없이도 조향토크 없이 차선변경 시작
+    atc_fork_auto = (not driver_enabled) and self.atc_type in ("fork left", "fork right")
+
     # auto lane change trigger (기존 로직 유지하되 side 기반)
     auto_lane_change_trigger = False
     if desire_enabled and side is not None:
@@ -371,11 +374,12 @@ class DesireHelper:
                 elif bsd_active:
                   if torque_applied and (not block_lanechange_bsd):
                     self.lane_change_state = LaneChangeState.laneChangeStarting
-                elif self.laneChangeNeedTorque > 0 or self.next_lane_change:
+                elif self.laneChangeNeedTorque > 0 or (self.next_lane_change and not atc_fork_auto):
                   if torque_applied:
                     self.lane_change_state = LaneChangeState.laneChangeStarting
-                elif driver_enabled:
+                elif driver_enabled or atc_fork_auto:
                   # driver blinker면 바로 시작(원본 유지)
+                  # 자동 길안내 갈림길(fork)도 토크 없이 옆 차선이 비어 있으면 바로 시작(재억 요청)
                   # 단, object/bzd 막힘은 side.lane_change_available에서 걸림
                   if side.lane_change_available:
                     self.lane_change_state = LaneChangeState.laneChangeStarting
