@@ -125,7 +125,6 @@ class CarInterface(CarInterfaceBase):
       ret.safetyConfigs = cfgs
 
       if ret.flags & HyundaiFlags.CANFD_HDA2:
-        ret.flags |= HyundaiFlags.ENABLE_BLINKERS.value  # 자동 차선변경 때 실제 방향지시등 켜기(시험)
         ret.safetyConfigs[-1].safetyParam |= HyundaiSafetyFlags.CANFD_LKA_STEERING.value
         if ret.flags & HyundaiFlags.CANFD_HDA2_ALT_STEERING:
           ret.safetyConfigs[-1].safetyParam |= HyundaiSafetyFlags.CANFD_LKA_STEERING_ALT.value
