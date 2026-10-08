@@ -114,8 +114,6 @@ class CarrotServ:
     self.szNearDirName = ""
     self.szFarDirName = ""
     self.nTBTNextRoadWidth = 0
-    self.nRoadClass = -1   # TmapNda가 보내는 도로 종류(0,1=고속)
-    self.autoNaviDrive = 0  # TmapNda 설정 "자동 길안내 주행" 켜짐 여부
 
     self.nTBTDistNext = 0
     self.nTBTTurnTypeNext = -1
@@ -774,14 +772,6 @@ class CarrotServ:
     fork_dist_for_speed = self.autoTurnControlTurnEnd * fork_speed / 3.6 # 5
     stop_dist_for_speed = 5
     start_fork_dist = np.interp(self.nRoadLimitSpeed, [30, 50, 100], [160, 200, 350])
-    # 재억 요청: 자동 길안내 주행은 제한속도 80 이상 도로(고속도로·도시고속도로·고속화도로)에서만,
-    # 진출은 2km 전부터 반응. 시내(80 미만)에서는 갈림길 자동 차선변경 안 함.
-    auto_navi_city = False
-    if self.autoNaviDrive == 1:
-      if self.nRoadLimitSpeed >= 80:
-        start_fork_dist = max(start_fork_dist, 2000)
-      else:
-        auto_navi_city = True
     start_turn_dist = np.interp(self.nTBTNextRoadWidth, [5, 10], [43, 60])
     turn_info_mapping = {
         1: {"type": "turn left", "speed": turn_speed, "dist": turn_dist_for_speed, "start": start_fork_dist},
@@ -799,8 +789,6 @@ class CarrotServ:
     mapping = turn_info_mapping.get(x_turn_info, default_mapping)
 
     atc_type = mapping["type"]
-    if auto_navi_city and atc_type in ("fork left", "fork right", "turn left", "turn right"):
-      atc_type += " prepare"  # 시내(80 미만)는 자동 길안내 전부 제외(갈림길·회전). 운전자 깜빡이는 그대로
     atc_speed = mapping["speed"]
     atc_dist = mapping["dist"]
     atc_start_dist = mapping["start"]
@@ -1348,8 +1336,6 @@ class CarrotServ:
       self.szFarDirName = _s(json.get("szFarDirName"))
 
       self.nTBTNextRoadWidth = int(json.get("nTBTNextRoadWidth", 0))
-      self.nRoadClass = _i(json.get("nRoadClass"), -1)
-      self.autoNaviDrive = _i(json.get("autoNaviDrive"), 0)
       self.nTBTDistNext = int(json.get("nTBTDistNext", 0))
       self.nTBTTurnTypeNext = int(json.get("nTBTTurnTypeNext", -1))
       self.szTBTMainTextNext = json.get("szTBTMainText", "")

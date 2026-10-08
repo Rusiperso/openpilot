@@ -257,7 +257,9 @@ class CarInterface(CarInterfaceBase):
       result = enable_radar_tracks(CP, can_recv, can_send)
       params.put_bool("EnableRadarTracksResult", result)
 
-    # 깜빡이: 0x7B1 통신 차단은 띠링 경고음 의심으로 하지 않음(2차 시험)
+    # for blinkers
+    if CP.flags & HyundaiFlags.ENABLE_BLINKERS:
+      disable_ecu(can_recv, can_send, bus=CanBus(CP).ECAN, addr=0x7B1, com_cont_req=b'\x28\x83\x01')
 
 def enable_radar_tracks(CP, logcan, sendcan):
   from opendbc.car.isotp_parallel_query import IsoTpParallelQuery
