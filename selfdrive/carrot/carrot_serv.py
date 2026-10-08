@@ -799,8 +799,8 @@ class CarrotServ:
     mapping = turn_info_mapping.get(x_turn_info, default_mapping)
 
     atc_type = mapping["type"]
-    if auto_navi_city and atc_type in ("fork left", "fork right"):
-      atc_type += " prepare"  # 시내(80 미만)는 자동 길안내의 갈림길 차선변경 제외(회전·운전자 깜빡이는 그대로)
+    if auto_navi_city and atc_type in ("fork left", "fork right", "turn left", "turn right"):
+      atc_type += " prepare"  # 시내(80 미만)는 자동 길안내 전부 제외(갈림길·회전). 운전자 깜빡이는 그대로
     atc_speed = mapping["speed"]
     atc_dist = mapping["dist"]
     atc_start_dist = mapping["start"]

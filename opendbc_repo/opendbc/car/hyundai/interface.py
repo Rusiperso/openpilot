@@ -125,6 +125,8 @@ class CarInterface(CarInterfaceBase):
       ret.safetyConfigs = cfgs
 
       if ret.flags & HyundaiFlags.CANFD_HDA2:
+        # 자동 차선변경 때 실제 방향지시등 켜기(2차 시험): 0x7b1 통신 차단·상시 전송은 빼고 깜빡이 필요할 때만 신호 전송. #문제시 원복
+        ret.flags |= HyundaiFlags.ENABLE_BLINKERS.value
         ret.safetyConfigs[-1].safetyParam |= HyundaiSafetyFlags.CANFD_LKA_STEERING.value
         if ret.flags & HyundaiFlags.CANFD_HDA2_ALT_STEERING:
           ret.safetyConfigs[-1].safetyParam |= HyundaiSafetyFlags.CANFD_LKA_STEERING_ALT.value
@@ -257,9 +259,7 @@ class CarInterface(CarInterfaceBase):
       result = enable_radar_tracks(CP, can_recv, can_send)
       params.put_bool("EnableRadarTracksResult", result)
 
-    # for blinkers
-    if CP.flags & HyundaiFlags.ENABLE_BLINKERS:
-      disable_ecu(can_recv, can_send, bus=CanBus(CP).ECAN, addr=0x7B1, com_cont_req=b'\x28\x83\x01')
+    # 깜빡이: 0x7B1 통신 차단은 띠링 경고음 의심으로 하지 않음(2차 시험)
 
 def enable_radar_tracks(CP, logcan, sendcan):
   from opendbc.car.isotp_parallel_query import IsoTpParallelQuery
