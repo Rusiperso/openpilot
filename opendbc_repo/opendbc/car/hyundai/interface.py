@@ -125,8 +125,6 @@ class CarInterface(CarInterfaceBase):
       ret.safetyConfigs = cfgs
 
       if ret.flags & HyundaiFlags.CANFD_HDA2:
-        # 자동 차선변경 때 실제 방향지시등 켜기(2차 시험): 0x7b1 통신 차단·상시 전송은 빼고 깜빡이 필요할 때만 신호 전송. #문제시 원복
-        ret.flags |= HyundaiFlags.ENABLE_BLINKERS.value
         ret.safetyConfigs[-1].safetyParam |= HyundaiSafetyFlags.CANFD_LKA_STEERING.value
         if ret.flags & HyundaiFlags.CANFD_HDA2_ALT_STEERING:
           ret.safetyConfigs[-1].safetyParam |= HyundaiSafetyFlags.CANFD_LKA_STEERING_ALT.value
