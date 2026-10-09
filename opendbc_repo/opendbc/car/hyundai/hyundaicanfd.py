@@ -456,7 +456,14 @@ def create_acc_control(packer, CAN, enabled, accel_last, accel, stopping, gas_ov
   return packer.make_can_msg("SCC_CONTROL", CAN.ECAN, values)
 
 
-def create_spas_messages(packer, CAN, frame, left_blink, right_blink):
+# 2026-10-09 깜빡이 켜기 시험: 차종별 BLINKER_CONTROL 값 (왼쪽, 오른쪽). 확인된 차종만 등록 - 목록에 없으면 안 보냄.
+# KIA_SORENTO_HEV_4TH_GEN (3, 4)는 다른 프로젝트 코드 기준이며 실차 확인 전. 문제시 원복
+BLINKER_CONTROL_VALUES = {
+  "KIA_SORENTO_HEV_4TH_GEN": (3, 4),
+}
+
+
+def create_spas_messages(packer, CAN, frame, left_blink, right_blink, values_lr=(3, 4)):
   ret = []
 
   values = {
@@ -465,9 +472,9 @@ def create_spas_messages(packer, CAN, frame, left_blink, right_blink):
 
   blink = 0
   if left_blink:
-    blink = 3
+    blink = values_lr[0]
   elif right_blink:
-    blink = 4
+    blink = values_lr[1]
   values = {
     "BLINKER_CONTROL": blink,
   }

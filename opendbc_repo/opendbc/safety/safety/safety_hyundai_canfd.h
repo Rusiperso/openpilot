@@ -87,6 +87,11 @@ const CanMsg HYUNDAI_CANFD_HDA2_LONG_TX_MSGS[] = {
 
   {0x4BE, 2, 8}, // NEW_MSG_4BE (may be corner radar enabler x)
   {0x4B9, 2, 8}, // NEW_MSG_4B9 (may be corner radar enabler)
+
+  {357, 0, 24}, // SPAS1 (blinker test 2026-10-09)
+  {362, 0, 32}, // SPAS2 BLINKER_CONTROL (blinker test)
+  {357, 1, 24}, // SPAS1
+  {362, 1, 32}, // SPAS2
 };
 
 const CanMsg HYUNDAI_CANFD_HDA1_TX_MSGS[] = {

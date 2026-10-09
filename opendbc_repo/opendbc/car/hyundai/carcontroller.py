@@ -1,3 +1,5 @@
+import os
+import time
 import numpy as np
 from opendbc.can import CANPacker
 from opendbc.car import Bus, DT_CTRL, apply_driver_steer_torque_limits, common_fault_avoidance, make_tester_present_msg, structs, apply_std_steer_angle_limits
@@ -351,6 +353,18 @@ class CarController(CarControllerBase):
       # blinkers
       if hda2 and self.CP.flags & HyundaiFlags.ENABLE_BLINKERS:
         can_sends.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, CC.leftBlinker, CC.rightBlinker))
+
+      # 2026-10-09 깜빡이 켜기 시험: Nda 스위치가 켜져 있고(깃발 파일이 10초 안에 갱신됨), 확인된 차종이며,
+      # 자동 차선변경 중인데 운전자가 직접 켠 깜빡이는 없을 때만 SPAS로 깜빡이 신호를 보냄. 문제시 원복
+      if self.frame % 20 == 0:
+        try:
+          self.auto_blinker_ok = (time.time() - os.path.getmtime("/dev/shm/auto_blinker_allowed")) < 10.0
+        except OSError:
+          self.auto_blinker_ok = False
+      blinker_vals = hyundaicanfd.BLINKER_CONTROL_VALUES.get(str(self.CP.carFingerprint))
+      if (hda2 and blinker_vals is not None and getattr(self, "auto_blinker_ok", False)
+          and (CC.leftBlinker or CC.rightBlinker) and not (CS.out.leftBlinker or CS.out.rightBlinker)):
+        can_sends.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, CC.leftBlinker, CC.rightBlinker, blinker_vals))
 
       if self.camera_scc_params in [2, 3]:
         self.canfd_toggle_adas(CC, CS)

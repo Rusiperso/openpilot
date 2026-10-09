@@ -1293,6 +1293,20 @@ class CarrotServ:
         self.goalPosY = float(json.get("goalPosY", self.goalPosY))
         self.szGoalName = json.get("szGoalName", self.szGoalName)
 
+    # 2026-10-09 깜빡이 시험: Nda "깜빡이 켜기 허용" 스위치(autoBlinker=1)를 깃발 파일로 전달. 켜져 있는 동안
+    # 2초마다 파일을 갱신하고, Nda 연결이 끊기면 파일이 10초 뒤 낡아서 carcontroller가 자동으로 꺼짐 취급. 문제시 원복
+    if "autoBlinker" in json:
+      try:
+        flag = "/dev/shm/auto_blinker_allowed"
+        if _i(json.get("autoBlinker"), 0) == 1:
+          if now - getattr(self, "_auto_blinker_touch", 0.0) > 2.0:
+            self._auto_blinker_touch = now
+            open(flag, "w").write("1")
+        elif os.path.exists(flag):
+          os.remove(flag)
+      except Exception:
+        pass
+
     if "nRoadLimitSpeed" in json:
       #print(json)
       self.active_sdi_count = self.active_sdi_count_max
