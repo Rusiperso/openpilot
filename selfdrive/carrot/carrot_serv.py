@@ -952,7 +952,10 @@ class CarrotServ:
     # 무관해서 즉시 반영. 카메라/방지턱은 이미 거리기반 감속곡선이 있어 그대로 둠.
     ROAD_LIMIT_SPEED_MAX_DECEL_RATE = 4.0  # km/h per second
     max_decrease_per_tick = ROAD_LIMIT_SPEED_MAX_DECEL_RATE / 20.0
-    if limit_speed < self.limit_speed_filtered:
+    # 2026-10-09: 신호가 4초 넘게 끊기면 필터가 200으로 돌아가는데, 그 값에서 4km/h/s로 내려오면
+    # 크루즈를 켠 직후 규정속도(예: 70)가 아니라 설정속도(110)에서 시작해 서서히 내려옴.
+    # 진짜 값을 받은 적 없는 상태(150 초과)에서는 천천히 내리지 않고 바로 맞춤. 문제시 원복
+    if limit_speed < self.limit_speed_filtered and self.limit_speed_filtered <= 150:
       self.limit_speed_filtered = max(limit_speed, self.limit_speed_filtered - max_decrease_per_tick)
     else:
       self.limit_speed_filtered = limit_speed
