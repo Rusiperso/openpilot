@@ -102,48 +102,93 @@ def download_ecamera(route, segment):
   print("download_route=", route, file_name, segment)
   return send_from_directory(file_name, "ecamera.hevc", as_attachment=True)
         
-def upload_folder_g4_ftp(local_folder, directory, remote_path):
-    from tqdm import tqdm
-    ftp_server = "g4nas.my"
-    ftp_port = 21
-    ftp_username = "sorento"
-    ftp_password = "Thfpsxh1111"
-    ftp = FTP()
-    ftp.connect(ftp_server, ftp_port)
-    ftp.login(ftp_username, ftp_password)
-    ftp.cwd("/sorento")
+G4_UPLOAD_URL = os.environ.get("CARROT_G4_WEB_UPLOAD_URL", "https://upload.g4nas.my").rstrip("/")
 
+
+def _g4_api(*parts):
+    import urllib.parse
+    return G4_UPLOAD_URL + "/api/v1/" + "/".join(urllib.parse.quote(str(p), safe="") for p in parts)
+
+
+def _g4_json(req, timeout):
+    import json
+    import urllib.request
+    import urllib.error
     try:
-        def create_path(path):
-            try:
-                ftp.mkd(path)
-            except:
-                pass
-            ftp.cwd(path)
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            status = resp.status
+            text = resp.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as e:
+        status = e.code
+        text = e.read().decode("utf-8", "replace")
+    try:
+        body = json.loads(text)
+    except Exception:
+        body = None
+    if not 200 <= status < 300 or not (isinstance(body, dict) and body.get("ok")):
+        error = (body or {}).get("error") if isinstance(body, dict) else None
+        raise RuntimeError(f"HTTP {status}: {str(error or text)[:200]}")
+    return body
 
-        for part in [directory, remote_path]:
-            create_path(part)
 
-        files = []
-        for root, _, filenames in os.walk(local_folder):
-            for filename in filenames:
-                if filename in ['rlog.zst', 'qcamera.ts']:
-                    files.append(os.path.join(root, filename))
+def upload_folder_g4_ftp(local_folder, directory, remote_path):
+    """G4 서버(HTTPS)로 보냄: 임시 세션 발급 -> 파일별 크기 대조하며 저장 -> 완료 신호. 저장된 비밀번호 없음."""
+    import json
+    import urllib.request
+    try:
+        params = Params()
+        car_name = params.get("CarName", "none").decode("utf-8")
+        dongle_id = params.get("DongleId", "unknown").decode("utf-8")
+        meta = {"carName": car_name, "dongleId": dongle_id, "deviceId": dongle_id, "purpose": "dashcam"}
+        req = urllib.request.Request(_g4_api("session"), data=json.dumps(meta).encode(),
+                                     headers={"Content-Type": "application/json"}, method="POST")
+        token = str(_g4_json(req, 12).get("token") or "").strip()
+        if not token:
+            raise RuntimeError("upload server did not issue a session")
 
-        with tqdm(total=len(files), desc="Uploading Files", unit="file") as pbar:
-            for local_file in files:
-                filename = os.path.basename(local_file)
+        names = sorted(
+            n for n in os.listdir(local_folder)
+            if os.path.isfile(os.path.join(local_folder, n)) and (n in ('rlog.zst', 'qcamera.ts') or n.endswith('.json'))
+        )
+        if not names:
+            raise RuntimeError("no files to upload")
+
+        uploaded = []
+        for filename in names:
+            path = os.path.join(local_folder, filename)
+            size = os.path.getsize(path)
+            last_error = None
+            for _ in range(2):
                 try:
-                    with open(local_file, 'rb') as f:
-                        ftp.storbinary(f'STOR {filename}', f)
-                    pbar.update(1)
+                    with open(path, "rb") as f:
+                        req = urllib.request.Request(
+                            _g4_api("upload", directory, remote_path, filename), data=f, method="PUT",
+                            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/octet-stream",
+                                     "Content-Length": str(size), "X-File-Size": str(size)})
+                        body = _g4_json(req, 180)
+                    remote_size = int(body.get("size", -1))
+                    if remote_size != size:
+                        raise RuntimeError(f"size mismatch for {filename}: sent {size}, remote {remote_size}")
+                    last_error = None
+                    break
                 except Exception as e:
-                    print(f"Failed to upload {local_file}: {e}")
+                    last_error = e
+            if last_error is not None:
+                raise RuntimeError(f"{filename}: {last_error}")
+            uploaded.append(filename)
 
-        ftp.quit()
+        try:
+            done = {"ok": True, "uploaded": 1, "total": 1, "target": "g4", "deviceId": dongle_id,
+                    "meta": {"carName": car_name, "dongleId": dongle_id},
+                    "results": [{"segment": remote_path, "ok": True, "files": uploaded}]}
+            req = urllib.request.Request(_g4_api("complete"), data=json.dumps(done).encode(), method="POST",
+                                         headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"})
+            _g4_json(req, 12)
+        except Exception as e:
+            print(f"G4 complete signal failed (files are saved): {e}")
         return True
     except Exception as e:
-        print(f"FTP Upload Error: {e}")
+        print(f"G4 Upload Error: {e}")
         return False
 
 
@@ -292,7 +337,7 @@ def upload_g4(route, segment):
         car_selected = Params().get("CarName", "none").decode('utf-8')
         dongle_id = Params().get("DongleId", "unknown").decode('utf-8')
         directory = f"routes {car_selected} {dongle_id}"
-        success = upload_folder_g4_ftp(local_folder, directory, f"{route}--{segment}")
+        success = upload_folder_g4_ftp(local_folder, dongle_id, f"{route}--{segment}")
         if success:
             temproute = route
             tempseg = segment
