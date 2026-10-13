@@ -131,15 +131,49 @@ def _g4_json(req, timeout):
     return body
 
 
+g4_last_error = ""
+
+
 def upload_folder_g4_ftp(local_folder, directory, remote_path):
     """G4 서버(HTTPS)로 보냄: 임시 세션 발급 -> 파일별 크기 대조하며 저장 -> 완료 신호. 저장된 비밀번호 없음."""
     import json
     import urllib.request
     try:
-        params = Params()
-        car_name = params.get("CarName", "none").decode("utf-8")
-        dongle_id = params.get("DongleId", "unknown").decode("utf-8")
-        meta = {"carName": car_name, "dongleId": dongle_id, "deviceId": dongle_id, "purpose": "dashcam"}
+        import re
+
+        def _param(key, default=""):
+            try:
+                v = Params().get(key)
+                v = v.decode("utf-8", errors="replace") if isinstance(v, bytes) else str(v or "")
+                return v.strip() or default
+            except Exception:
+                return default
+
+        def _serial():
+            for key in ("HardwareSerial", "DeviceSerial", "Serial", "CarrotSerial"):
+                v = _param(key)
+                if v:
+                    return v
+            for key in ("CARROT_DEVICE_SERIAL", "DEVICE_SERIAL", "SERIAL"):
+                v = os.environ.get(key, "").strip()
+                if v:
+                    return v
+            try:
+                from openpilot.system.hardware import HARDWARE
+                return str(HARDWARE.get_serial() or "").strip()
+            except Exception:
+                return ""
+
+        car_name = _param("CarName", "none")
+        dongle_id = _param("DongleId", "unknown")
+        serial = _serial()
+        # 서버 규칙: 기기 ID는 영문/숫자/_/- 8~64자, unknown/none 불가. DongleId가 안 맞으면 G4처럼 기기 시리얼을 씀.
+        ok_id = lambda v: bool(re.fullmatch(r"[A-Za-z0-9_-]{8,64}", v)) and v.lower() not in ("unknown", "none")
+        device_id = dongle_id if ok_id(dongle_id) else serial
+        if not ok_id(device_id):
+            raise RuntimeError(f"no valid device id (DongleId='{dongle_id}', serial='{serial}')")
+        directory = device_id
+        meta = {"carName": car_name, "dongleId": dongle_id, "serial": serial, "deviceId": device_id, "purpose": "dashcam"}
         req = urllib.request.Request(_g4_api("session"), data=json.dumps(meta).encode(),
                                      headers={"Content-Type": "application/json"}, method="POST")
         token = str(_g4_json(req, 12).get("token") or "").strip()
@@ -178,8 +212,8 @@ def upload_folder_g4_ftp(local_folder, directory, remote_path):
             uploaded.append(filename)
 
         try:
-            done = {"ok": True, "uploaded": 1, "total": 1, "target": "g4", "deviceId": dongle_id,
-                    "meta": {"carName": car_name, "dongleId": dongle_id},
+            done = {"ok": True, "uploaded": 1, "total": 1, "target": "g4", "deviceId": device_id,
+                    "meta": {"carName": car_name, "dongleId": dongle_id, "serial": serial},
                     "results": [{"segment": remote_path, "ok": True, "files": uploaded}]}
             req = urllib.request.Request(_g4_api("complete"), data=json.dumps(done).encode(), method="POST",
                                          headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"})
@@ -188,6 +222,8 @@ def upload_folder_g4_ftp(local_folder, directory, remote_path):
             print(f"G4 complete signal failed (files are saved): {e}")
         return True
     except Exception as e:
+        global g4_last_error
+        g4_last_error = str(e)[:300]
         print(f"G4 Upload Error: {e}")
         return False
 
@@ -334,16 +370,13 @@ def upload_g4(route, segment):
         local_folder = os.path.join(Paths.log_root(), f"{route}--{segment}")
         if not os.path.isdir(local_folder):
             abort(404, "Folder not found")
-        car_selected = Params().get("CarName", "none").decode('utf-8')
-        dongle_id = Params().get("DongleId", "unknown").decode('utf-8')
-        directory = f"routes {car_selected} {dongle_id}"
-        success = upload_folder_g4_ftp(local_folder, dongle_id, f"{route}--{segment}")
+        success = upload_folder_g4_ftp(local_folder, "", f"{route}--{segment}")
         if success:
             temproute = route
             tempseg = segment
             return "All files uploaded successfully", 200
         else:
-            return "Failed to upload files", 500
+            return "G4 upload failed: " + (g4_last_error or "unknown"), 500
     else:
         return "Segment already uploaded", 200
         

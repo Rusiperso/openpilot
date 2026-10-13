@@ -308,7 +308,7 @@
                                     uploadedSize += size;
                                     resolve();
                                 } else {
-                                    reject(new Error(`Upload failed: ${xhr.statusText}`));
+                                    reject(new Error(`Upload failed: ${xhr.responseText || xhr.statusText}`));
                                 }
                             };
                             xhr.onerror = () => reject(new Error('Upload failed'));
