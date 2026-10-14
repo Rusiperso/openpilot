@@ -1549,6 +1549,7 @@ body[data-page="tools"] .swipe-container,
 
 .dashcam-selection-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   overflow-x: auto;
@@ -2153,6 +2154,7 @@ body[data-page="tools"] .swipe-container,
     min-height: 0;
     height: 100%;
     flex-direction: column;
+    flex-wrap: nowrap;
     justify-content: center;
     align-items: stretch;
     gap: 6px;

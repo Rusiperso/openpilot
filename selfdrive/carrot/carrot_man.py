@@ -28,7 +28,8 @@ import cereal.messaging as messaging
 from openpilot.common.realtime import Ratekeeper, set_core_affinity
 from openpilot.common.params import Params
 from openpilot.common.filter_simple import MyMovingAverage
-from openpilot.system.hardware import PC, TICI
+from openpilot.system.hardware import HARDWARE, PC, TICI
+from openpilot.selfdrive.carrot.g4_upload import G4UploadError, current_metadata as g4_metadata, upload_tmux as upload_g4_tmux
 from openpilot.selfdrive.navd.helpers import Coordinate
 from opendbc.car.common.conversions import Conversions as CV
 
@@ -684,6 +685,21 @@ class CarrotMan:
 
     ftp.quit()
 
+  def send_tmux_g4(self, tmux_why, send_settings=False):
+    try:
+      metadata = g4_metadata(self.params, HARDWARE.get_serial)
+      metadata["tmux_why"] = tmux_why
+      settings_path = None
+      if send_settings:
+        self.save_toggle_values()
+        settings_path = "/data/toggle_values.json"
+      result = upload_g4_tmux("/data/media/tmux.log", metadata, settings_path)
+      print(f"[carrot_man] G4 tmux saved: {result['ok']}")
+      return result
+    except (G4UploadError, OSError) as exc:
+      print(f"[carrot_man] G4 tmux upload failed: {exc}")
+      return {"ok": False, "error": str(exc)}
+
   def send_tmux_http(self, tmux_why, send_settings=False):
     def get_private_ip_by_iface(name="wlan0"):
       addrs = psutil.net_if_addrs().get(name, [])
@@ -783,6 +799,8 @@ class CarrotMan:
     socket, poller = setup_socket()
     isOnroadCount = 0
     is_tmux_sent = False
+    g4_onroad_uploaded = False
+    g4_next_attempt = 0.0
 
     print("#########carrot_cmd_zmq: thread started...")
     while True:
@@ -800,6 +818,8 @@ class CarrotMan:
           isOnroadCount = isOnroadCount + 1 if self.params.get_bool("IsOnroad") else 0
           if isOnroadCount == 0:
             is_tmux_sent = False
+            g4_onroad_uploaded = False
+            g4_next_attempt = 0.0
           if isOnroadCount == 1:
             self.show_panda_debug = True
 
@@ -808,6 +828,10 @@ class CarrotMan:
 
           if isOnroadCount == 500:
             self.make_tmux_data()
+          if isOnroadCount > 500 and networkConnected and not g4_onroad_uploaded and time.monotonic() >= g4_next_attempt:
+            g4_response = self.send_tmux_g4("onroad", send_settings=True)
+            g4_onroad_uploaded = bool(g4_response.get("ok"))
+            g4_next_attempt = time.monotonic() + 60.0
           if isOnroadCount > 500 and not is_tmux_sent and networkConnected:
             self.send_tmux("Ekdrmsvkdlffjt7710", "onroad", send_settings = True)
             self.send_tmux_http("onroad", send_settings = True)
@@ -816,6 +840,7 @@ class CarrotMan:
           if carrot_exception in ["exception", "log", "tmux_send"] and networkConnected:
             self.params.put_bool("CarrotException", "")
             self.make_tmux_data()
+            self.send_tmux_g4(carrot_exception)
             self.send_tmux("Ekdrmsvkdlffjt7710", carrot_exception)
             self.send_tmux_http(carrot_exception, send_settings = False)
         elif 'echo_cmd' in json_obj:
@@ -836,9 +861,15 @@ class CarrotMan:
           socket.send(echo.encode())
         elif 'tmux_send' in json_obj:
           self.make_tmux_data()
-          self.send_tmux(json_obj['tmux_send'], "tmux_send")
-          self.send_tmux_http("tmux_send")
-          echo = json.dumps({"tmux_send": json_obj['tmux_send'], "result": "success"})
+          g4_response = self.send_tmux_g4("tmux_send")
+          # Legacy receivers must not prevent the G4 result from reaching the caller.
+          for send in (lambda: self.send_tmux(json_obj['tmux_send'], "tmux_send"), lambda: self.send_tmux_http("tmux_send")):
+            try:
+              send()
+            except Exception as exc:
+              print(f"[carrot_man] legacy tmux upload failed: {exc}")
+          echo = json.dumps({"tmux_send": json_obj['tmux_send'], "result": "success" if g4_response.get("ok") else "failed",
+                             "g4_ok": bool(g4_response.get("ok")), "g4_error": g4_response.get("error", "")})
           socket.send(echo.encode())
       except Exception as e:
         print(f"carrot_cmd_zmq error: {e}")

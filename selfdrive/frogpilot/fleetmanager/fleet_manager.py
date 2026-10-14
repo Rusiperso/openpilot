@@ -29,6 +29,9 @@ from flask import Flask, jsonify, render_template, Response, request, send_from_
 from openpilot.common.realtime import set_core_affinity
 import openpilot.selfdrive.frogpilot.fleetmanager.helpers as fleet
 from openpilot.system.hardware.hw import Paths
+from openpilot.system.hardware import HARDWARE
+from openpilot.selfdrive.carrot.g4_upload import current_metadata
+from openpilot.selfdrive.frogpilot.fleetmanager.g4_routes import register as register_g4_upload
 from openpilot.common.swaglog import cloudlog
 import traceback
 from ftplib import FTP
@@ -43,8 +46,6 @@ from openpilot.opendbc_repo.opendbc.car.values import PLATFORMS
 
 # Initialize messaging
 sm = messaging.SubMaster(['carState'])
-tempseg = -1
-temproute = "None"
 tempsegc = -1
 temproutec = "None"
 
@@ -102,132 +103,6 @@ def download_ecamera(route, segment):
   print("download_route=", route, file_name, segment)
   return send_from_directory(file_name, "ecamera.hevc", as_attachment=True)
         
-G4_UPLOAD_URL = os.environ.get("CARROT_G4_WEB_UPLOAD_URL", "https://upload.g4nas.my").rstrip("/")
-
-
-def _g4_api(*parts):
-    import urllib.parse
-    return G4_UPLOAD_URL + "/api/v1/" + "/".join(urllib.parse.quote(str(p), safe="") for p in parts)
-
-
-def _g4_json(req, timeout):
-    import json
-    import urllib.request
-    import urllib.error
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            status = resp.status
-            text = resp.read().decode("utf-8", "replace")
-    except urllib.error.HTTPError as e:
-        status = e.code
-        text = e.read().decode("utf-8", "replace")
-    try:
-        body = json.loads(text)
-    except Exception:
-        body = None
-    if not 200 <= status < 300 or not (isinstance(body, dict) and body.get("ok")):
-        error = (body or {}).get("error") if isinstance(body, dict) else None
-        raise RuntimeError(f"HTTP {status}: {str(error or text)[:200]}")
-    return body
-
-
-g4_last_error = ""
-
-
-def upload_folder_g4_ftp(local_folder, directory, remote_path):
-    """G4 서버(HTTPS)로 보냄: 임시 세션 발급 -> 파일별 크기 대조하며 저장 -> 완료 신호. 저장된 비밀번호 없음."""
-    import json
-    import urllib.request
-    try:
-        import re
-
-        def _param(key, default=""):
-            try:
-                v = Params().get(key)
-                v = v.decode("utf-8", errors="replace") if isinstance(v, bytes) else str(v or "")
-                return v.strip() or default
-            except Exception:
-                return default
-
-        def _serial():
-            for key in ("HardwareSerial", "DeviceSerial", "Serial", "CarrotSerial"):
-                v = _param(key)
-                if v:
-                    return v
-            for key in ("CARROT_DEVICE_SERIAL", "DEVICE_SERIAL", "SERIAL"):
-                v = os.environ.get(key, "").strip()
-                if v:
-                    return v
-            try:
-                from openpilot.system.hardware import HARDWARE
-                return str(HARDWARE.get_serial() or "").strip()
-            except Exception:
-                return ""
-
-        car_name = _param("CarName", "none")
-        dongle_id = _param("DongleId", "unknown")
-        serial = _serial()
-        # 서버 규칙: 기기 ID는 영문/숫자/_/- 8~64자, unknown/none 불가. DongleId가 안 맞으면 G4처럼 기기 시리얼을 씀.
-        ok_id = lambda v: bool(re.fullmatch(r"[A-Za-z0-9_-]{8,64}", v)) and v.lower() not in ("unknown", "none")
-        device_id = dongle_id if ok_id(dongle_id) else serial
-        if not ok_id(device_id):
-            raise RuntimeError(f"no valid device id (DongleId='{dongle_id}', serial='{serial}')")
-        directory = device_id
-        meta = {"carName": car_name, "dongleId": dongle_id, "serial": serial, "deviceId": device_id, "purpose": "dashcam"}
-        req = urllib.request.Request(_g4_api("session"), data=json.dumps(meta).encode(),
-                                     headers={"Content-Type": "application/json"}, method="POST")
-        token = str(_g4_json(req, 12).get("token") or "").strip()
-        if not token:
-            raise RuntimeError("upload server did not issue a session")
-
-        names = sorted(
-            n for n in os.listdir(local_folder)
-            if os.path.isfile(os.path.join(local_folder, n)) and (n in ('rlog.zst', 'qcamera.ts') or n.endswith('.json'))
-        )
-        if not names:
-            raise RuntimeError("no files to upload")
-
-        uploaded = []
-        for filename in names:
-            path = os.path.join(local_folder, filename)
-            size = os.path.getsize(path)
-            last_error = None
-            for _ in range(2):
-                try:
-                    with open(path, "rb") as f:
-                        req = urllib.request.Request(
-                            _g4_api("upload", directory, remote_path, filename), data=f, method="PUT",
-                            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/octet-stream",
-                                     "Content-Length": str(size), "X-File-Size": str(size)})
-                        body = _g4_json(req, 180)
-                    remote_size = int(body.get("size", -1))
-                    if remote_size != size:
-                        raise RuntimeError(f"size mismatch for {filename}: sent {size}, remote {remote_size}")
-                    last_error = None
-                    break
-                except Exception as e:
-                    last_error = e
-            if last_error is not None:
-                raise RuntimeError(f"{filename}: {last_error}")
-            uploaded.append(filename)
-
-        try:
-            done = {"ok": True, "uploaded": 1, "total": 1, "target": "g4", "deviceId": device_id,
-                    "meta": {"carName": car_name, "dongleId": dongle_id, "serial": serial},
-                    "results": [{"segment": remote_path, "ok": True, "files": uploaded}]}
-            req = urllib.request.Request(_g4_api("complete"), data=json.dumps(done).encode(), method="POST",
-                                         headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"})
-            _g4_json(req, 12)
-        except Exception as e:
-            print(f"G4 complete signal failed (files are saved): {e}")
-        return True
-    except Exception as e:
-        global g4_last_error
-        g4_last_error = str(e)[:300]
-        print(f"G4 Upload Error: {e}")
-        return False
-
-
 def upload_folder_to_ftp(local_folder, directory, remote_path):
     from tqdm import tqdm
     ftp_server = "shind0.synology.me"
@@ -362,24 +237,8 @@ def upload_carrot(route, segment):
         return "Segment already uploaded", 200
 
 
-@app.route("/footage/full/upload_g4/<route>/<segment>", methods=['POST'])
-def upload_g4(route, segment):
-    global tempseg
-    global temproute
-    if tempseg != segment or temproute != route:
-        local_folder = os.path.join(Paths.log_root(), f"{route}--{segment}")
-        if not os.path.isdir(local_folder):
-            abort(404, "Folder not found")
-        success = upload_folder_g4_ftp(local_folder, "", f"{route}--{segment}")
-        if success:
-            temproute = route
-            tempseg = segment
-            return "All files uploaded successfully", 200
-        else:
-            return "G4 upload failed: " + (g4_last_error or "unknown"), 500
-    else:
-        return "Segment already uploaded", 200
-        
+register_g4_upload(app, Paths.log_root, lambda: current_metadata(Params(), HARDWARE.get_serial))
+
 @app.template_filter('datetimeformat')
 def datetimeformat_filter(filename):
     try:

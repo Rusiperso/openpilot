@@ -3589,6 +3589,7 @@ function dashcamRouteCardHtml(entry, index = 0, options = {}) {
           <span class="dashcam-selection-count">선택 ${selected.length}개</span>
           <button class="smallBtn" type="button" data-action="select-route" data-route="${routeAttr}" data-selected="${allSelected ? "1" : "0"}">${allSelected ? "전체 해제" : "전체 선택"}</button>
           <button class="smallBtn btn--filled" type="button" data-action="upload-selected" data-route="${routeAttr}" ${selected.length ? "" : "disabled"}>선택 전송</button>
+          <button class="smallBtn btn--filled" type="button" data-action="upload-selected-g4" data-route="${routeAttr}" ${selected.length ? "" : "disabled"}>G4 서버 업로드</button>
         </div>
         <div class="dashcam-segment-list">${segmentList}</div>
       </div>
@@ -3660,8 +3661,9 @@ function updateDashcamRouteSelectionUi(route) {
     selectBtn.textContent = allSelected ? "전체 해제" : "전체 선택";
   }
 
-  const uploadBtn = card.querySelector('[data-action="upload-selected"]');
-  if (uploadBtn) uploadBtn.disabled = selected.length === 0;
+  card.querySelectorAll('[data-action="upload-selected"], [data-action="upload-selected-g4"]').forEach(button => {
+    button.disabled = selected.length === 0;
+  });
 
   card.querySelectorAll('input[data-action="select-segment"]').forEach((input) => {
     const segment = input.dataset.segment || "";
@@ -3765,7 +3767,10 @@ function dashcamUploadResultHtml(result) {
   const discord = result?.discord || {};
   let discordLabel = "Discord: 설정 없음";
   let discordClass = "is-muted";
-  if (discord.configured && discord.ok) {
+  if (result?.target === "g4") {
+    discordLabel = result.ok ? "G4 서버에 저장 완료" : "G4 전송 실패 · 오류 확인";
+    discordClass = result.ok ? "is-ok" : "is-error";
+  } else if (discord.configured && discord.ok) {
     discordLabel = "Discord: 전송 완료";
     discordClass = "is-ok";
   } else if (discord.configured) {
@@ -3799,11 +3804,11 @@ async function showDashcamUploadResult(result) {
   }
 }
 
-function openDashcamUploadProgress(total) {
+function openDashcamUploadProgress(total, target = "carrot") {
   const overlay = document.createElement("div");
   overlay.className = "dashcam-upload-progress";
   overlay.innerHTML = `<div class="dashcam-upload-progress__sheet" role="dialog" aria-modal="true">
-    <div class="dashcam-upload-progress__title">로그 전송 중</div>
+    <div class="dashcam-upload-progress__title">${target === "g4" ? "G4 서버 업로드 중" : "로그 전송 중"}</div>
     <div class="dashcam-upload-progress__message">0/${Number(total || 0)}</div>
     <div class="dashcam-upload-progress__bar" aria-hidden="true"><span></span></div>
   </div>`;
@@ -3821,17 +3826,19 @@ function openDashcamUploadProgress(total) {
   };
 }
 
-async function uploadDashcamSegments(segments) {
+async function uploadDashcamSegments(segments, target = "carrot") {
   const targets = Array.from(new Set(segments || [])).filter(Boolean);
   if (!targets.length) {
     showAppToast("선택된 세그먼트가 없습니다.", { tone: "error" });
     return;
   }
-  const ok = await appConfirm(`당근 서버에 ${targets.length}개 로그를 전송할까요?`, { title: "로그 전송" });
+  const title = target === "g4" ? "G4 서버 업로드" : "로그 전송";
+  const server = target === "g4" ? "G4 서버" : "당근 서버";
+  const ok = await appConfirm(`${server}에 ${targets.length}개 영상·주행 로그를 전송할까요?`, { title });
   if (!ok) return;
-  const progress = openDashcamUploadProgress(targets.length);
+  const progress = openDashcamUploadProgress(targets.length, target);
   try {
-    const result = await postJson("/api/dashcam/upload", { segments: targets });
+    const result = await postJson("/api/dashcam/upload", { segments: targets, target });
     const message = result.message || `전송 완료 ${result.uploaded || 0}/${result.total || targets.length}`;
     showAppToast(message, { tone: result.ok ? "default" : "error", duration: 3600 });
     progress.close();
@@ -3850,6 +3857,7 @@ async function showDashcamSegmentMenu(route, segment) {
     choices: [
       { label: "재생", value: "play" },
       { label: "로그 전송", value: "upload" },
+      { label: "G4 서버 업로드", value: "upload_g4" },
       { label: "qcamera 다운로드", value: "download_qcamera" },
       { label: "rlog 다운로드", value: "download_rlog" },
       { label: "qlog 다운로드", value: "download_qlog" },
@@ -3857,6 +3865,7 @@ async function showDashcamSegmentMenu(route, segment) {
   });
   if (selected === "play") openDashcamPlayer(route, segment);
   else if (selected === "upload") await uploadDashcamSegments([segment]);
+  else if (selected === "upload_g4") await uploadDashcamSegments([segment], "g4");
   else if (selected?.startsWith?.("download_")) {
     const kind = selected.replace("download_", "");
     window.open(dashcamApiPath(`download/${encodeURIComponent(segment)}`, kind), "_blank", "noopener");
@@ -4018,10 +4027,10 @@ function bindLogsPage() {
           else dashcamState.selected.add(item);
         }
         if (!updateDashcamRouteSelectionUi(route)) renderDashcamRoutes();
-      } else if (action === "upload-selected") {
+      } else if (action === "upload-selected" || action === "upload-selected-g4") {
         const entry = dashcamState.routes.find((item) => item.route === route);
         const targets = dashcamSelectedForRoute(entry || { segmentFolders: [] });
-        uploadDashcamSegments(targets).catch(() => {});
+        uploadDashcamSegments(targets, action === "upload-selected-g4" ? "g4" : "carrot").catch(() => {});
       }
     });
     routesHost.addEventListener("change", (ev) => {
