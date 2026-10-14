@@ -96,15 +96,16 @@
                 <i class="bi bi-upload me-2"></i>
                 Upload All Selected Routes To Carrot Server
             </button>
-            <button class="btn btn-warning ms-2" onclick="uploadSelectedSegments('upload_g4')">
+            <button class="btn btn-warning ms-2" id="g4UploadButton" onclick="uploadSelectedG4Segments()">
                 <i class="bi bi-upload me-2"></i>
-                Upload All Selected Routes To G4 Server
+                G4 서버 업로드
             </button>
             <div id="uploadStatus" class="mt-2"></div>
         </div>
 		
     </div>
 
+    <script src="{{ url_for('static', filename='g4_upload.js') }}"></script>
     <script>
         const segments = [{{ segments }}];
         const currentSegment = "{{ route }}--{{ query_segment }}";

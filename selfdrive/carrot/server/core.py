@@ -42,6 +42,11 @@ import uuid
 import hashlib
 import mimetypes
 from ftplib import FTP
+from openpilot.selfdrive.carrot.g4_upload import (
+  normalize_metadata as g4_metadata,
+  storage_directory as g4_storage_directory,
+  upload_segment as upload_g4_segment,
+)
 from openpilot.common.realtime import set_core_affinity
 from openpilot.system.hardware import HARDWARE
 
@@ -842,6 +847,11 @@ async def api_dashcam_upload(request: web.Request) -> web.Response:
       body = await request.json()
     except Exception:
       body = {}
+    if not isinstance(body, dict):
+      return web.json_response({"ok": False, "error": "JSON object is required"}, status=400)
+    target = str(body.get("target") or "carrot").strip().lower()
+    if target not in {"carrot", "g4"}:
+      return web.json_response({"ok": False, "error": "unsupported upload target"}, status=400)
     segments = body.get("segments")
     if not isinstance(segments, list):
       one = body.get("segment")
@@ -852,28 +862,29 @@ async def api_dashcam_upload(request: web.Request) -> web.Response:
 
     params = Params() if HAS_PARAMS else None
     meta = _dashcam_upload_metadata(params)
+    if target == "g4":
+      meta = g4_metadata(meta)
     car_selected = meta.get("carName") or "none"
     dongle_id = meta.get("dongleId") or "unknown"
-    directory = f"{car_selected} {dongle_id}".strip()
+    directory = g4_storage_directory(meta) if target == "g4" else f"{car_selected} {dongle_id}".strip()
     remote_base_path = f"routes/{directory}/".replace("\\", "/")
 
     results = []
     for segment in segments:
       try:
         segment_dir = _dashcam_segment_dir(segment)
-        ok = await asyncio.to_thread(
-          _dashcam_upload_folder_to_ftp,
-          segment_dir,
-          directory,
-          segment,
-        )
+        if target == "g4":
+          saved = await asyncio.to_thread(upload_g4_segment, DASHCAM_ROOT, segment, meta)
+          ok = saved["ok"]
+        else:
+          ok = await asyncio.to_thread(_dashcam_upload_folder_to_ftp, segment_dir, directory, segment)
         results.append({
           "segment": segment,
           "route": _dashcam_route_name(segment),
           "segmentIndex": _dashcam_segment_index(segment),
           "ok": bool(ok),
           "remotePath": f"{remote_base_path}{segment}",
-          "files": _dashcam_segment_file_summary(segment_dir),
+          "files": saved["files"] if target == "g4" else _dashcam_segment_file_summary(segment_dir),
         })
       except Exception as e:
         results.append({
@@ -883,12 +894,14 @@ async def api_dashcam_upload(request: web.Request) -> web.Response:
           "ok": False,
           "remotePath": f"{remote_base_path}{segment}",
           "error": str(e),
+          "filesSaved": bool(getattr(e, "files_saved", False)),
         })
 
     ok_count = sum(1 for item in results if item["ok"])
     uploaded_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     response_payload = {
       "ok": ok_count == len(results),
+      "target": target,
       "uploaded": ok_count,
       "total": len(results),
       "uploadedAt": uploaded_at,
@@ -898,9 +911,10 @@ async def api_dashcam_upload(request: web.Request) -> web.Response:
       "message": f"{ok_count}/{len(results)} uploaded",
     }
     response_payload["shareText"] = _dashcam_upload_share_text(response_payload)
-    response_payload["discord"] = await _dashcam_send_discord_webhook(
-      _dashcam_discord_webhook_url(params),
-      response_payload,
+    response_payload["discord"] = (
+      {"configured": False, "ok": False, "skipped": True}
+      if target == "g4"
+      else await _dashcam_send_discord_webhook(_dashcam_discord_webhook_url(params), response_payload)
     )
     return web.json_response(response_payload)
   except Exception as e:
