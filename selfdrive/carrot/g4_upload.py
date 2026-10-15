@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import os
 import re
+import threading
+import time
 from contextlib import ExitStack
 from pathlib import Path
 from typing import Any, Callable, Mapping
@@ -17,13 +19,17 @@ SEGMENT_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.|-]{0,127}--\d+")
 RLOG_NAMES = ("rlog.zst", "rlog.bz2", "rlog")
 VIDEO_NAMES = ("qcamera.ts", "qcamera.mp4")
 MAX_FILE_BYTES = 512 * 1024 * 1024
+FILE_UPLOAD_ATTEMPTS = 3
+_SESSION_TOKENS: dict[tuple, tuple[str, float]] = {}
+_SESSION_LOCK = threading.Lock()
 
 
 class G4UploadError(RuntimeError):
-  def __init__(self, message: str, *, status: int = 502, files_saved: bool = False):
+  def __init__(self, message: str, *, status: int = 502, files_saved: bool = False, retryable: bool = False):
     super().__init__(message)
     self.status = status
     self.files_saved = files_saved
+    self.retryable = retryable
 
 
 def _text(value: Any) -> str:
@@ -87,22 +93,45 @@ def _json_request(session: requests.Session, method: str, url: str, **kwargs: An
   try:
     response = session.request(method, url, timeout=(10, 180), **kwargs)
   except requests.RequestException as exc:
-    raise G4UploadError(f"G4 서버 연결 실패: {exc}") from exc
+    raise G4UploadError(f"G4 서버 연결 실패: {exc}", retryable=isinstance(exc, (requests.ConnectionError, requests.Timeout))) from exc
   try:
     body = response.json()
   except ValueError:
     body = {}
   if not 200 <= response.status_code < 300 or not isinstance(body, dict) or body.get("ok") is not True:
+    if response.status_code in {401, 403}:
+      rejected = kwargs.get("headers", {}).get("Authorization", "").removeprefix("Bearer ")
+      with _SESSION_LOCK:
+        for key, (token, _) in list(_SESSION_TOKENS.items()):
+          if token == rejected:
+            del _SESSION_TOKENS[key]
     detail = body.get("error") if isinstance(body, dict) else ""
-    raise G4UploadError(f"G4 서버 HTTP {response.status_code}: {_text(detail or response.text)[:200]}")
+    raise G4UploadError(f"G4 서버 HTTP {response.status_code}: {_text(detail or response.text)[:200]}",
+                        retryable=response.status_code in {502, 503, 504})
   return body
 
 
 def _session_token(session: requests.Session, base: str, metadata: dict[str, str], purpose: str) -> str:
+  key = (base, purpose, tuple(sorted(metadata.items())))
+  with _SESSION_LOCK:
+    now = time.monotonic()
+    for expired in [key for key, (_, expires) in _SESSION_TOKENS.items() if expires <= now]:
+      del _SESSION_TOKENS[expired]
+    if purpose == "dashcam" and key in _SESSION_TOKENS:
+      return _SESSION_TOKENS[key][0]
   body = _json_request(session, "POST", _api(base, "session"), json={**metadata, "purpose": purpose})
   token = _text(body.get("token"))
   if not token:
     raise G4UploadError("G4 서버가 업로드 세션을 발급하지 않았습니다.")
+  # A selection can contain more than the receiver's 30 session issues per
+  # ten minutes. Reuse its explicitly advertised lifetime across segments;
+  # keep identities, destination metadata and purposes isolated.
+  lifetime = body.get("expiresIn")
+  if purpose == "dashcam" and isinstance(lifetime, int) and lifetime > 30:
+    with _SESSION_LOCK:
+      if len(_SESSION_TOKENS) >= 128:
+        del _SESSION_TOKENS[next(iter(_SESSION_TOKENS))]
+      _SESSION_TOKENS[key] = (token, time.monotonic() + min(lifetime - 30, 3600))
   return token
 
 
@@ -135,6 +164,31 @@ def selected_files(log_root: str | Path, segment: str) -> list[Path]:
   return files
 
 
+def _upload_file(base: str, token: str, device: str, segment: str, path: Path) -> dict[str, Any]:
+  before = path.stat()
+  headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/octet-stream",
+             "X-File-Size": str(before.st_size), "Content-Length": str(before.st_size)}
+  for attempt in range(FILE_UPLOAD_ATTEMPTS):
+    current = path.stat()
+    if (current.st_size, current.st_mtime_ns) != (before.st_size, before.st_mtime_ns):
+      raise G4UploadError(f"{path.name}: 전송 중 파일이 변경됐습니다. 다시 선택해 전송하세요.")
+    try:
+      # Reopen at byte zero and use a fresh connection on every attempt. The
+      # receiver atomically replaces a complete file, so interrupted PUTs can
+      # safely be repeated without appending or retransmitting earlier files.
+      with requests.Session() as transfer, path.open("rb") as data:
+        response = _json_request(transfer, "PUT", _api(base, "upload", device, segment, path.name), data=data, headers=headers)
+      after = path.stat()
+      if response.get("size") != before.st_size or (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
+        raise G4UploadError(f"{path.name}: 전송 크기가 다르거나 전송 중 파일이 변경됐습니다.")
+      return {"name": path.name, "size": before.st_size}
+    except G4UploadError as exc:
+      if not exc.retryable or attempt + 1 == FILE_UPLOAD_ATTEMPTS:
+        raise G4UploadError(f"{segment}/{path.name}: {attempt + 1}회 시도 후 실패: {exc}",
+                            status=exc.status, files_saved=exc.files_saved) from exc
+      time.sleep(1 + attempt * 2)
+
+
 def upload_segment(log_root: str | Path, segment: str, metadata: Mapping[str, Any]) -> dict[str, Any]:
   files = selected_files(log_root, segment)
   meta = normalize_metadata(metadata)
@@ -142,16 +196,8 @@ def upload_segment(log_root: str | Path, segment: str, metadata: Mapping[str, An
   uploaded = []
   with requests.Session() as session:
     token = _session_token(session, base, meta, "dashcam")
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/octet-stream"}
     for path in files:
-      before = path.stat()
-      with path.open("rb") as data:
-        response = _json_request(session, "PUT", _api(base, "upload", meta["deviceId"], segment, path.name),
-                                 data=data, headers={**headers, "X-File-Size": str(before.st_size), "Content-Length": str(before.st_size)})
-      after = path.stat()
-      if response.get("size") != before.st_size or (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
-        raise G4UploadError(f"{path.name}: 전송 크기가 다르거나 전송 중 파일이 변경됐습니다.")
-      uploaded.append({"name": path.name, "size": before.st_size})
+      uploaded.append(_upload_file(base, token, meta["deviceId"], segment, path))
     remote_base = f"routes/{storage_directory(meta)}/"
     result = {"ok": True, "target": "g4", "serverUrl": base, "deviceId": meta["deviceId"], "meta": meta,
               "uploaded": 1, "total": 1, "segment": segment, "remoteBasePath": remote_base,

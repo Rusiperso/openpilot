@@ -13,6 +13,13 @@ SEGMENT = "00000cfb--69588de3d7--0"
 META = {"carName": "TEST_CAR", "dongleId": "0123456789abcdef"}
 
 
+@pytest.fixture(autouse=True)
+def clear_session_tokens():
+  g4_upload._SESSION_TOKENS.clear()
+  yield
+  g4_upload._SESSION_TOKENS.clear()
+
+
 class Response:
   def __init__(self, body, status=200):
     self.body = body
@@ -56,6 +63,7 @@ def source(tmp_path):
 
 def install_session(monkeypatch, responses):
   monkeypatch.delenv("CARROT_G4_WEB_UPLOAD_URL", raising=False)
+  monkeypatch.setattr(g4_upload.time, "sleep", lambda seconds: None)
   session = Session(responses)
   monkeypatch.setattr(g4_upload.requests, "Session", lambda: session)
   return session
@@ -116,10 +124,105 @@ def test_serial_fallback_is_also_used_for_completion_identity(source, monkeypatc
 @pytest.mark.parametrize("response", [Response({"ok": True, "size": 1}), Response({"ok": False}, 200),
                                     Response({"error": "quota exceeded"}, 413), requests.ConnectionError("offline")])
 def test_failed_or_incorrect_file_response_never_reports_success(source, monkeypatch, response):
-  session = install_session(monkeypatch, [Response({"ok": True, "token": "test-session"}), response])
+  failures = [response] * 3 if isinstance(response, requests.ConnectionError) else [response]
+  session = install_session(monkeypatch, [Response({"ok": True, "token": "test-session"}), *failures])
   with pytest.raises(g4_upload.G4UploadError):
     g4_upload.upload_segment(source.parent, SEGMENT, META)
   assert not any(url.endswith("/complete") for _, url, _ in session.calls)
+
+
+def test_dropped_video_connection_reopens_at_zero_without_resending_rlog(source, monkeypatch):
+  sessions = [Session([Response({"ok": True, "token": "test-session"}), Response({"ok": True})]),
+              Session([Response({"ok": True, "size": 8})]), Session([requests.ConnectionError("Remote end closed connection without response")]),
+              Session([Response({"ok": True, "size": 10})])]
+  factory = iter(sessions)
+  monkeypatch.setattr(g4_upload.requests, "Session", lambda: next(factory))
+  waits = []
+  monkeypatch.setattr(g4_upload.time, "sleep", waits.append)
+  assert g4_upload.upload_segment(source.parent, SEGMENT, META)["ok"]
+  assert waits == [1]
+  assert sessions[1].calls[0][2]["data"] == b"full log"
+  assert sessions[2].calls[0][2]["data"] == sessions[3].calls[0][2]["data"] == b"road video"
+  assert len(sessions[1].calls) == 1
+  assert sessions[0].calls[-1][1].endswith("/complete")
+
+
+@pytest.mark.parametrize("failure", [requests.ReadTimeout("timeout"), Response({"error": "temporary upstream failure"}, 502)])
+def test_temporary_file_failure_retries_same_file(source, monkeypatch, failure):
+  responses = success_responses()
+  responses.insert(1, failure)
+  session = install_session(monkeypatch, responses)
+  assert g4_upload.upload_segment(source.parent, SEGMENT, META)["ok"]
+  puts = [args["data"] for method, _, args in session.calls if method == "PUT"]
+  assert puts == [b"full log", b"full log", b"road video"]
+
+
+def test_repeated_connection_failure_is_bounded_and_names_failed_file(source, monkeypatch):
+  session = install_session(monkeypatch, [Response({"ok": True, "token": "test-session"}),
+                                        *[requests.ConnectionError("connection lost") for _ in range(3)]])
+  with pytest.raises(g4_upload.G4UploadError, match=r"rlog.zst: 3회"):
+    g4_upload.upload_segment(source.parent, SEGMENT, META)
+  assert len([call for call in session.calls if call[0] == "PUT"]) == 3
+  assert not any(url.endswith("/complete") for _, url, _ in session.calls)
+
+
+def test_source_changed_between_attempts_aborts_before_reupload(source, monkeypatch):
+  session = install_session(monkeypatch, [Response({"ok": True, "token": "test-session"}), requests.ConnectionError("lost")])
+  monkeypatch.setattr(g4_upload.time, "sleep", lambda seconds: (source / "rlog.zst").write_bytes(b"changed"))
+  with pytest.raises(g4_upload.G4UploadError, match="파일이 변경"):
+    g4_upload.upload_segment(source.parent, SEGMENT, META)
+  assert len([call for call in session.calls if call[0] == "PUT"]) == 1
+
+
+def test_quota_failure_is_not_retried(source, monkeypatch):
+  session = install_session(monkeypatch, [Response({"ok": True, "token": "test-session"}), Response({"error": "quota exceeded"}, 413)])
+  with pytest.raises(g4_upload.G4UploadError, match="HTTP 413"):
+    g4_upload.upload_segment(source.parent, SEGMENT, META)
+  assert len([call for call in session.calls if call[0] == "PUT"]) == 1
+
+
+def test_34_segments_reuse_one_session_instead_of_exceeding_issue_limit(source, monkeypatch):
+  responses = [Response({"ok": True, "token": "test-session", "expiresIn": 14400})]
+  responses += success_responses()[1:] * 34
+  session = install_session(monkeypatch, responses)
+  for index in range(34):
+    folder = source.parent / f"00000cfb--69588de3d7--{index}"
+    folder.mkdir(exist_ok=True)
+    for name in ("rlog.zst", "qcamera.ts"):
+      (folder / name).write_bytes((source / name).read_bytes())
+    assert g4_upload.upload_segment(source.parent, folder.name, META)["ok"]
+  assert len([url for _, url, _ in session.calls if url.endswith("/session")]) == 1
+  assert len([url for _, url, _ in session.calls if url.endswith("/complete")]) == 34
+
+
+def test_cached_session_is_not_shared_between_vehicle_destinations(monkeypatch):
+  session = install_session(monkeypatch, [Response({"ok": True, "token": "one", "expiresIn": 100}),
+                                        Response({"ok": True, "token": "two", "expiresIn": 100})])
+  assert g4_upload._session_token(session, "https://example.test", META, "dashcam") == "one"
+  assert g4_upload._session_token(session, "https://example.test", {**META, "carName": "OTHER"}, "dashcam") == "two"
+  assert g4_upload._session_token(session, "https://example.test", META, "dashcam") == "one"
+  assert len(session.calls) == 2
+
+
+def test_expired_session_is_renewed_before_upload(monkeypatch):
+  now = [0]
+  monkeypatch.setattr(g4_upload.time, "monotonic", lambda: now[0])
+  session = install_session(monkeypatch, [Response({"ok": True, "token": "one", "expiresIn": 100}),
+                                        Response({"ok": True, "token": "two", "expiresIn": 100})])
+  assert g4_upload._session_token(session, "https://example.test", META, "dashcam") == "one"
+  now[0] = 71
+  assert g4_upload._session_token(session, "https://example.test", META, "dashcam") == "two"
+
+
+def test_rejected_cached_token_is_discarded_for_next_user_retry(source, monkeypatch):
+  first = success_responses()
+  first[0] = Response({"ok": True, "token": "old-token", "expiresIn": 14400})
+  session = install_session(monkeypatch, [*first, Response({"error": "upload session IP mismatch"}, 403), *success_responses()])
+  assert g4_upload.upload_segment(source.parent, SEGMENT, META)["ok"]
+  with pytest.raises(g4_upload.G4UploadError, match="HTTP 403"):
+    g4_upload.upload_segment(source.parent, SEGMENT, META)
+  assert g4_upload.upload_segment(source.parent, SEGMENT, META)["ok"]
+  assert len([url for _, url, _ in session.calls if url.endswith("/session")]) == 2
 
 
 def test_completion_failure_reports_that_files_were_saved(source, monkeypatch):
