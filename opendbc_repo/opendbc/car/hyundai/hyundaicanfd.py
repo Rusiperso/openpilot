@@ -462,8 +462,13 @@ BLINKER_CONTROL_VALUES = {
   "KIA_SORENTO_HEV_4TH_GEN": (3, 4),
 }
 
+# 2026-10-17 비상깜빡이 시험: BLINKER_CONTROL 의 비상깜빡이 값(dbc 기준 1). 실차 확인 전. 문제시 원복
+HAZARD_CONTROL_VALUES = {
+  "KIA_SORENTO_HEV_4TH_GEN": 1,
+}
 
-def create_spas_messages(packer, CAN, frame, left_blink, right_blink, values_lr=(3, 4)):
+
+def create_spas_messages(packer, CAN, frame, left_blink, right_blink, values_lr=(3, 4), hazard_value=None):
   ret = []
 
   values = {
@@ -471,7 +476,9 @@ def create_spas_messages(packer, CAN, frame, left_blink, right_blink, values_lr=
   ret.append(packer.make_can_msg("SPAS1", CAN.ECAN, values))
 
   blink = 0
-  if left_blink:
+  if hazard_value:
+    blink = hazard_value
+  elif left_blink:
     blink = values_lr[0]
   elif right_blink:
     blink = values_lr[1]

@@ -364,14 +364,43 @@ class CarController(CarControllerBase):
       blinker_vals = hyundaicanfd.BLINKER_CONTROL_VALUES.get(str(self.CP.carFingerprint))
       # 2026-10-16 끊김 수정: 운전자 깜빡이 확인은 보내기 시작할 때만 하고, 시작한 뒤엔 차 램프가 켜져도 계속 보냄
       # (이전엔 램프가 켜지면 신호를 끊어서 켜졌다 꺼졌다 반복). 자동 차선변경이 끝나면 해제. 문제시 원복
-      if (hda2 and blinker_vals is not None and getattr(self, "auto_blinker_ok", False)
-          and (CC.leftBlinker or CC.rightBlinker)):
-        if not getattr(self, "auto_blinker_sending", False):
-          self.auto_blinker_sending = not (CS.out.leftBlinker or CS.out.rightBlinker)
+      # 2026-10-17 한 박자 늦음 수정: 차선변경 명령이 시작 직후 켜졌다 꺼졌다 해도, 한번 보내기 시작하면 명령이
+      # 1초 넘게 꺼질 때까지 끊지 않고 마지막 방향으로 계속 보냄(예전엔 끊기면 차 램프가 꺼질 때까지 재시작 못 함). 문제시 원복
+      if hda2 and blinker_vals is not None and getattr(self, "auto_blinker_ok", False):
+        if CC.leftBlinker or CC.rightBlinker:
+          self.auto_blinker_off_frames = 0
+          self.auto_blinker_dir = (bool(CC.leftBlinker), bool(CC.rightBlinker))
+          if not getattr(self, "auto_blinker_sending", False):
+            self.auto_blinker_sending = not (CS.out.leftBlinker or CS.out.rightBlinker)
+        elif getattr(self, "auto_blinker_sending", False):
+          self.auto_blinker_off_frames = getattr(self, "auto_blinker_off_frames", 0) + 1
+          if self.auto_blinker_off_frames > 100:
+            self.auto_blinker_sending = False
       else:
         self.auto_blinker_sending = False
       if getattr(self, "auto_blinker_sending", False):
-        can_sends.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, CC.leftBlinker, CC.rightBlinker, blinker_vals))
+        left_b, right_b = getattr(self, "auto_blinker_dir", (False, False))
+        can_sends.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, left_b, right_b, blinker_vals))
+
+      # 2026-10-17 비상깜빡이 시험: 후진 기어(0.3초 이상 유지)를 넣으면 비상깜빡이를 켜고,
+      # 후진을 벗어난 뒤 3초 더 유지. 운전자가 이미 비상깜빡이를 켰으면 건드리지 않음. Nda 스위치(autoBlinker)가 켜져 있을 때만. 문제시 원복
+      hazard_val = hyundaicanfd.HAZARD_CONTROL_VALUES.get(str(self.CP.carFingerprint))
+      if hazard_val is not None and hda2 and getattr(self, "auto_blinker_ok", False):
+        if CS.out.gearShifter == structs.CarState.GearShifter.reverse:
+          self.hazard_reverse_frames = getattr(self, "hazard_reverse_frames", 0) + 1
+          if self.hazard_reverse_frames >= 30:
+            self.hazard_until_frame = self.frame + 300
+        else:
+          self.hazard_reverse_frames = 0
+        if self.frame < getattr(self, "hazard_until_frame", 0) and not getattr(self, "auto_blinker_sending", False):
+          if getattr(self, "hazard_sending", False) or not (CS.out.leftBlinker and CS.out.rightBlinker):
+            self.hazard_sending = True
+            can_sends.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, False, False, blinker_vals or (3, 4), hazard_val))
+        else:
+          self.hazard_sending = False
+      else:
+        self.hazard_sending = False
+        self.hazard_reverse_frames = 0
 
       if self.camera_scc_params in [2, 3]:
         self.canfd_toggle_adas(CC, CS)
