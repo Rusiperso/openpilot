@@ -362,8 +362,15 @@ class CarController(CarControllerBase):
         except OSError:
           self.auto_blinker_ok = False
       blinker_vals = hyundaicanfd.BLINKER_CONTROL_VALUES.get(str(self.CP.carFingerprint))
+      # 2026-10-16 끊김 수정: 운전자 깜빡이 확인은 보내기 시작할 때만 하고, 시작한 뒤엔 차 램프가 켜져도 계속 보냄
+      # (이전엔 램프가 켜지면 신호를 끊어서 켜졌다 꺼졌다 반복). 자동 차선변경이 끝나면 해제. 문제시 원복
       if (hda2 and blinker_vals is not None and getattr(self, "auto_blinker_ok", False)
-          and (CC.leftBlinker or CC.rightBlinker) and not (CS.out.leftBlinker or CS.out.rightBlinker)):
+          and (CC.leftBlinker or CC.rightBlinker)):
+        if not getattr(self, "auto_blinker_sending", False):
+          self.auto_blinker_sending = not (CS.out.leftBlinker or CS.out.rightBlinker)
+      else:
+        self.auto_blinker_sending = False
+      if getattr(self, "auto_blinker_sending", False):
         can_sends.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, CC.leftBlinker, CC.rightBlinker, blinker_vals))
 
       if self.camera_scc_params in [2, 3]:
