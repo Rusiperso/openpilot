@@ -1133,6 +1133,7 @@ class CarrotServ:
     msg.carrotMan.vTurnSpeed = int(vturn_speed)
     msg.carrotMan.szPosRoadName = self.szPosRoadName + self.debugText
     msg.carrotMan.szTBTMainText = self.szTBTMainText
+    msg.carrotMan.szNearDirName = self.szNearDirName
     msg.carrotMan.desiredSpeed = int(desired_speed)
     msg.carrotMan.desiredSource = source
     msg.carrotMan.carrotCmdIndex = int(self.carrotCmdIndex)

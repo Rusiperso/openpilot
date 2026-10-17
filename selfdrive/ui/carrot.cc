@@ -980,6 +980,7 @@ private:
     QString atc_type;
     QString szPosRoadName = "";
     QString szTBTMainText = "";
+    QString szNearDirName = "";
 
 protected:
     QPointF navi_turn_point[2];
@@ -1343,6 +1344,21 @@ protected:
             ui_fill_rect(s->vg, { (int)bounds[0] - 10, (int)bounds[1] - 2, (int)text_width + 20, (int)text_height + 13 }, COLOR_GREEN, 10);
             ui_draw_text(s, tbt_x + 200, tbt_y + 218, szSdiDescr.toStdString().c_str(), 46, COLOR_WHITE, BOLD);
         }
+        else if (szNearDirName.length() > 0) {
+          // v: 재억 요청(2026-10-17) - 네이버 안내의 "OO 방면"·로터리 "N시 방향" 줄. 카메라/방지턱/도로명
+          // 자리를 쓰되(카메라 안내가 있으면 그쪽이 우선) 도로명보다 앞서 보여줌. 카드 폭(약 570px)을
+          // 넘으면 글씨를 줄여 맞춤. #문제시 원복
+          const std::string dirText = szNearDirName.toStdString();
+          float bounds[4];
+          float fontSize = 46;
+          nvgFontSize(s->vg, fontSize);
+          nvgTextBounds(s->vg, tbt_x + 200, tbt_y + 218, dirText.c_str(), NULL, bounds);
+          float textWidth = bounds[2] - bounds[0];
+          if (textWidth > 570) {
+            fontSize = std::max(28.0f, fontSize * 570.0f / textWidth);
+          }
+          ui_draw_text(s, tbt_x + 200, tbt_y + 218, dirText.c_str(), fontSize, nvgRGBA(127, 214, 255, 255), BOLD);
+        }
         else if (szPosRoadName.length() > 0) {
           // v: 재억 요청(2026-08-22) - 글씨가 작아서 키움. 다만 바로 아래(같은 y좌표)에
           // 카메라/방지턱 아이콘이 뜨는 자리라서, 그 자리를 밀어내지 않는 선에서만 키움. #문제시 원복
@@ -1408,7 +1424,8 @@ public:
           szSdiDescr = QString::fromStdString(carrot_man.getSzSdiDescr());
           szPosRoadName = QString::fromStdString(carrot_man.getSzPosRoadName());
           szTBTMainText = QString::fromStdString(carrot_man.getSzTBTMainText());
-          
+          szNearDirName = QString::fromStdString(carrot_man.getSzNearDirName());
+
         }
         else {
           //xTurnInfo = -1;
@@ -1420,6 +1437,7 @@ public:
           szSdiDescr = "";
           szPosRoadName = "";
           szTBTMainText = "";
+          szNearDirName = "";
         }
 
 #ifdef __UI_TEST
