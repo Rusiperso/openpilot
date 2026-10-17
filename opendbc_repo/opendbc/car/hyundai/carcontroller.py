@@ -375,16 +375,12 @@ class CarController(CarControllerBase):
             self.auto_blinker_sending = not (CS.out.leftBlinker or CS.out.rightBlinker)
         elif getattr(self, "auto_blinker_sending", False):
           self.auto_blinker_off_frames = getattr(self, "auto_blinker_off_frames", 0) + 1
-          # 2026-10-17 차선변경이 끝나면 깜빡이를 바로 끔: 명령이 꺼진 뒤 0.1초만 마지막 방향을 유지하고(깜빡임 끊김 방지),
-          # 그 뒤 0.3초는 끄기 값(0)을 직접 보낸 다음 멈춤. 예전엔 1초 넘게 계속 켜 둠. 문제시 원복
-          if self.auto_blinker_off_frames > 40:
+          if self.auto_blinker_off_frames > 100:
             self.auto_blinker_sending = False
       else:
         self.auto_blinker_sending = False
       if getattr(self, "auto_blinker_sending", False):
         left_b, right_b = getattr(self, "auto_blinker_dir", (False, False))
-        if getattr(self, "auto_blinker_off_frames", 0) > 10:
-          left_b = right_b = False  # 명령이 꺼진 지 0.1초가 지났으면 끄기 값(0)을 보냄
         can_sends.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, left_b, right_b, blinker_vals))
 
       # 2026-10-17 비상깜빡이 시험: 후진 기어(0.3초 이상 유지)를 넣으면 비상깜빡이를 켜고,
@@ -397,13 +393,7 @@ class CarController(CarControllerBase):
             self.hazard_until_frame = self.frame + 300
         else:
           self.hazard_reverse_frames = 0
-        # 2026-10-17 캔 에러 방지: 비상등을 보내는 중에 캔 에러(canValid 끊김)가 나면 즉시 멈추고, 시동을 다시 걸 때까지 비상등 전송을 막음. 문제시 원복
-        if hazard_sending_prev_bad := (getattr(self, "hazard_sending", False) and not CS.out.canValid):
-          self.hazard_blocked = True
-          self.hazard_until_frame = 0
-        if getattr(self, "hazard_blocked", False):
-          self.hazard_sending = False
-        elif self.frame < getattr(self, "hazard_until_frame", 0) and not getattr(self, "auto_blinker_sending", False):
+        if self.frame < getattr(self, "hazard_until_frame", 0) and not getattr(self, "auto_blinker_sending", False):
           if getattr(self, "hazard_sending", False) or not (CS.out.leftBlinker and CS.out.rightBlinker):
             self.hazard_sending = True
             # 2026-10-17 비상등 불규칙 수정: 값 1을 계속 보내면 차가 불규칙하게 깜빡여서, 0.4초 켜고 0.4초 끄는 박자로 직접 보냄. 문제시 원복
