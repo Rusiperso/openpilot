@@ -399,34 +399,42 @@ class CarController(CarControllerBase):
         else:
           self.auto_blinker_cancel_frames = 0
 
-      # 2026-10-17 비상깜빡이 시험: 후진 기어(0.3초 이상 유지)를 넣으면 비상깜빡이를 켜고,
-      # 후진을 벗어난 뒤 3초 더 유지. 운전자가 이미 비상깜빡이를 켰으면 건드리지 않음. Nda 스위치(autoBlinker)가 켜져 있을 때만. 문제시 원복
+      # 2026-10-17 비상깜빡이 시험(방식 변경): 계속 보내면 캔 에러가 떠서, 후진을 넣고 0.3초 뒤에 켜기 신호를 "한 번만 짧게(0.3초)" 보내고
+      # 그 뒤로는 아무것도 보내지 않음. 후진을 벗어나고 3초 뒤, 우리가 켠 비상등이 아직 켜져 있으면 끄기 신호를 한 번만 짧게 보냄.
+      # 운전자가 직접 켠 비상등은 건드리지 않음. Nda 스위치(autoBlinker)가 켜져 있을 때만. 문제시 원복
       hazard_val = hyundaicanfd.HAZARD_CONTROL_VALUES.get(str(self.CP.carFingerprint))
       if hazard_val is not None and hda2 and getattr(self, "auto_blinker_ok", False):
-        if CS.out.gearShifter == structs.CarState.GearShifter.reverse:
+        in_reverse = CS.out.gearShifter == structs.CarState.GearShifter.reverse
+        car_hazard_on = bool(CS.out.leftBlinker and CS.out.rightBlinker)
+        if in_reverse:
           self.hazard_reverse_frames = getattr(self, "hazard_reverse_frames", 0) + 1
-          if self.hazard_reverse_frames >= 30:
-            self.hazard_until_frame = self.frame + 300
+          self.hazard_leave_frames = 0
         else:
           self.hazard_reverse_frames = 0
-        # 2026-10-17 캔 에러 방지: 비상등을 보내는 중에 캔 에러(canValid 끊김)가 나면 즉시 멈추고, 시동을 다시 걸 때까지 비상등 전송을 막음. 문제시 원복
-        if hazard_sending_prev_bad := (getattr(self, "hazard_sending", False) and not CS.out.canValid):
+          self.hazard_leave_frames = getattr(self, "hazard_leave_frames", 0) + 1
+        # 캔 에러 방지: 신호를 보내는 중에 캔 에러(canValid 끊김)가 나면 즉시 멈추고, 시동을 다시 걸 때까지 비상등 전송을 막음
+        if getattr(self, "hazard_pulse_frames", 0) > 0 and not CS.out.canValid:
           self.hazard_blocked = True
-          self.hazard_until_frame = 0
+          self.hazard_pulse_frames = 0
         if getattr(self, "hazard_blocked", False):
-          self.hazard_sending = False
-        elif self.frame < getattr(self, "hazard_until_frame", 0) and not getattr(self, "auto_blinker_sending", False):
-          if getattr(self, "hazard_sending", False) or not (CS.out.leftBlinker and CS.out.rightBlinker):
-            self.hazard_sending = True
-            # 2026-10-17 비상등 불규칙 수정: 값 1을 계속 보내면 차가 불규칙하게 깜빡여서, 0.4초 켜고 0.4초 끄는 박자로 직접 보냄. 문제시 원복
-            if (self.frame // 40) % 2 == 0:
-              can_sends.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, False, False, blinker_vals or (3, 4), hazard_val))
-            else:
-              can_sends.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, False, False, blinker_vals or (3, 4)))
+          self.hazard_pulse_frames = 0
+        else:
+          if in_reverse and self.hazard_reverse_frames == 30 and not car_hazard_on and not getattr(self, "hazard_by_us", False):
+            self.hazard_pulse_frames = 30
+            self.hazard_by_us = True
+          elif (not in_reverse) and self.hazard_leave_frames == 300 and getattr(self, "hazard_by_us", False):
+            self.hazard_by_us = False
+            if car_hazard_on:
+              self.hazard_pulse_frames = 30
+        if getattr(self, "hazard_pulse_frames", 0) > 0 and not getattr(self, "auto_blinker_sending", False):
+          self.hazard_pulse_frames -= 1
+          self.hazard_sending = True
+          can_sends.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, False, False, blinker_vals or (3, 4), hazard_val))
         else:
           self.hazard_sending = False
       else:
         self.hazard_sending = False
+        self.hazard_pulse_frames = 0
         self.hazard_reverse_frames = 0
 
       if self.camera_scc_params in [2, 3]:
