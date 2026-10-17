@@ -149,6 +149,9 @@ procs = [
 
   PythonProcess("carrot_server", "selfdrive.carrot.carrot_server", always_run),
 
+  # 2026-10-17 읽기 전용 기록: 차가 SPAS1/2(깜빡이 신호 이름표)를 스스로 보내는지 확인(캔 오류 원인 조사용). 문제시 원복
+  PythonProcess("spas_probe", "selfdrive.carrot.spas_probe", only_onroad),
+
   #Xiaoge data broadcaster (conditional on ShareData param)
   PythonProcess("xiaoge_data", "selfdrive.carrot.xiaoge_data", enable_xiaoge_data),
   # c3x lite
