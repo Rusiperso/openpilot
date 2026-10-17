@@ -25,11 +25,12 @@ _SESSION_LOCK = threading.Lock()
 
 
 class G4UploadError(RuntimeError):
-  def __init__(self, message: str, *, status: int = 502, files_saved: bool = False, retryable: bool = False):
+  def __init__(self, message: str, *, status: int = 502, files_saved: bool = False, retryable: bool = False, session_rejected: bool = False):
     super().__init__(message)
     self.status = status
     self.files_saved = files_saved
     self.retryable = retryable
+    self.session_rejected = session_rejected
 
 
 def _text(value: Any) -> str:
@@ -106,18 +107,29 @@ def _json_request(session: requests.Session, method: str, url: str, **kwargs: An
           if token == rejected:
             del _SESSION_TOKENS[key]
     detail = body.get("error") if isinstance(body, dict) else ""
-    raise G4UploadError(f"G4 서버 HTTP {response.status_code}: {_text(detail or response.text)[:200]}",
-                        retryable=response.status_code in {502, 503, 504})
+    detail = _text(detail or response.text)
+    session_rejected = (response.status_code == 401 and detail == "expired upload session") or (
+      response.status_code == 403 and detail == "upload session IP mismatch")
+    if response.status_code == 413:
+      limit = re.search(r"Maximum request body size (\d+) exceeded, actual body size (\d+)", detail)
+      file_size = int(kwargs.get("headers", {}).get("X-File-Size", "0"))
+      if "quota" in detail.lower() or (limit and (int(limit[1]) > MAX_FILE_BYTES or int(limit[2]) > file_size > 0)):
+        detail = f"서버의 일일 전송 한도에 도달했습니다. 이미 저장된 구간은 유지됩니다. {detail}"
+      else:
+        detail = f"서버의 파일 크기 또는 전송량 제한을 초과했습니다. {detail}"
+    raise G4UploadError(f"G4 서버 HTTP {response.status_code}: {detail[:300]}",
+                        status=response.status_code if 400 <= response.status_code < 500 else 502,
+                        retryable=response.status_code in {502, 503, 504}, session_rejected=session_rejected)
   return body
 
 
-def _session_token(session: requests.Session, base: str, metadata: dict[str, str], purpose: str) -> str:
+def _session_token(session: requests.Session, base: str, metadata: dict[str, str], purpose: str, *, force_new: bool = False) -> str:
   key = (base, purpose, tuple(sorted(metadata.items())))
   with _SESSION_LOCK:
     now = time.monotonic()
     for expired in [key for key, (_, expires) in _SESSION_TOKENS.items() if expires <= now]:
       del _SESSION_TOKENS[expired]
-    if purpose == "dashcam" and key in _SESSION_TOKENS:
+    if not force_new and purpose == "dashcam" and key in _SESSION_TOKENS:
       return _SESSION_TOKENS[key][0]
   body = _json_request(session, "POST", _api(base, "session"), json={**metadata, "purpose": purpose})
   token = _text(body.get("token"))
@@ -133,6 +145,32 @@ def _session_token(session: requests.Session, base: str, metadata: dict[str, str
         del _SESSION_TOKENS[next(iter(_SESSION_TOKENS))]
       _SESSION_TOKENS[key] = (token, time.monotonic() + min(lifetime - 30, 3600))
   return token
+
+
+class _UploadAuthorization:
+  def __init__(self, session: requests.Session, base: str, metadata: dict[str, str], purpose: str):
+    self.base = base
+    self.metadata = metadata
+    self.purpose = purpose
+    self.token = _session_token(session, base, metadata, purpose)
+    self.renewed = False
+
+  @property
+  def headers(self) -> dict[str, str]:
+    return {"Authorization": f"Bearer {self.token}"}
+
+  def refresh(self, error: G4UploadError) -> bool:
+    # Keep server IP/device/purpose checks intact. A mobile-network change or
+    # expiry can be recovered by obtaining one new IP-bound session; arbitrary
+    # authentication failures and repeated network changes must still stop.
+    if not error.session_rejected or self.renewed:
+      return False
+    self.renewed = True
+    # Do not issue the replacement over a pooled connection still using the
+    # old network address; subsequent uploads also open fresh connections.
+    with requests.Session() as issuance:
+      self.token = _session_token(issuance, self.base, self.metadata, self.purpose, force_new=True)
+    return True
 
 
 def storage_directory(metadata: dict[str, str]) -> str:
@@ -164,10 +202,9 @@ def selected_files(log_root: str | Path, segment: str) -> list[Path]:
   return files
 
 
-def _upload_file(base: str, token: str, device: str, segment: str, path: Path) -> dict[str, Any]:
+def _upload_file(base: str, authorization: _UploadAuthorization, device: str, segment: str, path: Path) -> dict[str, Any]:
   before = path.stat()
-  headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/octet-stream",
-             "X-File-Size": str(before.st_size), "Content-Length": str(before.st_size)}
+  headers = {"Content-Type": "application/octet-stream", "X-File-Size": str(before.st_size), "Content-Length": str(before.st_size)}
   for attempt in range(FILE_UPLOAD_ATTEMPTS):
     current = path.stat()
     if (current.st_size, current.st_mtime_ns) != (before.st_size, before.st_mtime_ns):
@@ -177,12 +214,18 @@ def _upload_file(base: str, token: str, device: str, segment: str, path: Path) -
       # receiver atomically replaces a complete file, so interrupted PUTs can
       # safely be repeated without appending or retransmitting earlier files.
       with requests.Session() as transfer, path.open("rb") as data:
-        response = _json_request(transfer, "PUT", _api(base, "upload", device, segment, path.name), data=data, headers=headers)
+        response = _json_request(transfer, "PUT", _api(base, "upload", device, segment, path.name), data=data,
+                                 headers={**headers, **authorization.headers})
       after = path.stat()
       if response.get("size") != before.st_size or (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
         raise G4UploadError(f"{path.name}: 전송 크기가 다르거나 전송 중 파일이 변경됐습니다.")
       return {"name": path.name, "size": before.st_size}
     except G4UploadError as exc:
+      try:
+        if attempt + 1 < FILE_UPLOAD_ATTEMPTS and authorization.refresh(exc):
+          continue
+      except G4UploadError as renewal_error:
+        raise G4UploadError(f"{segment}/{path.name}: 새 업로드 세션 발급 실패: {renewal_error}", status=renewal_error.status) from renewal_error
       if not exc.retryable or attempt + 1 == FILE_UPLOAD_ATTEMPTS:
         raise G4UploadError(f"{segment}/{path.name}: {attempt + 1}회 시도 후 실패: {exc}",
                             status=exc.status, files_saved=exc.files_saved) from exc
@@ -195,18 +238,26 @@ def upload_segment(log_root: str | Path, segment: str, metadata: Mapping[str, An
   base = base_url()
   uploaded = []
   with requests.Session() as session:
-    token = _session_token(session, base, meta, "dashcam")
+    authorization = _UploadAuthorization(session, base, meta, "dashcam")
     for path in files:
-      uploaded.append(_upload_file(base, token, meta["deviceId"], segment, path))
+      uploaded.append(_upload_file(base, authorization, meta["deviceId"], segment, path))
     remote_base = f"routes/{storage_directory(meta)}/"
     result = {"ok": True, "target": "g4", "serverUrl": base, "deviceId": meta["deviceId"], "meta": meta,
               "uploaded": 1, "total": 1, "segment": segment, "remoteBasePath": remote_base,
               "remotePath": remote_base + segment, "files": uploaded}
     manifest = {**result, "results": [{"segment": segment, "ok": True, "files": uploaded}]}
-    try:
-      _json_request(session, "POST", _api(base, "complete"), json=manifest, headers={"Authorization": f"Bearer {token}"})
-    except G4UploadError as exc:
-      raise G4UploadError(f"파일은 저장됐지만 완료 기록 저장에 실패했습니다: {exc}", files_saved=True) from exc
+    for attempt in range(2):
+      try:
+        with requests.Session() as completion:
+          _json_request(completion, "POST", _api(base, "complete"), json=manifest, headers=authorization.headers)
+        break
+      except G4UploadError as exc:
+        try:
+          if attempt == 0 and authorization.refresh(exc):
+            continue
+        except G4UploadError as renewal_error:
+          exc = renewal_error
+        raise G4UploadError(f"파일은 저장됐지만 완료 기록 저장에 실패했습니다: {exc}", status=exc.status, files_saved=True) from exc
     return result
 
 
@@ -216,16 +267,22 @@ def upload_tmux(log_path: str | Path, metadata: Mapping[str, Any], settings_path
     raise G4UploadError("전송할 tmux 로그가 없습니다.", status=400)
   meta = normalize_metadata(metadata)
   base = base_url()
-  with requests.Session() as session, ExitStack() as stack:
-    token = _session_token(session, base, meta, "tmux")
-    files = [("files[0]", ("tmux.log", stack.enter_context(path.open("rb")), "text/plain"))]
-    if settings_path is not None:
-      settings = Path(settings_path)
-      if not settings.is_file() or settings.is_symlink():
-        raise G4UploadError("전송할 설정 파일이 없습니다.", status=400)
-      files.append(("files[1]", ("toggle_values.json", stack.enter_context(settings.open("rb")), "application/json")))
-    result = _json_request(session, "POST", _api(base, "tmux", "upload"),
-                           headers={"Authorization": f"Bearer {token}"}, data=meta, files=files)
-    if result.get("files") != len(files):
-      raise G4UploadError("G4 서버에 저장된 tmux 파일 개수가 다릅니다.")
-    return {**result, "target": "g4", "serverUrl": base}
+  with requests.Session() as session:
+    authorization = _UploadAuthorization(session, base, meta, "tmux")
+    for attempt in range(2):
+      try:
+        with requests.Session() as transfer, ExitStack() as stack:
+          files = [("files[0]", ("tmux.log", stack.enter_context(path.open("rb")), "text/plain"))]
+          if settings_path is not None:
+            settings = Path(settings_path)
+            if not settings.is_file() or settings.is_symlink():
+              raise G4UploadError("전송할 설정 파일이 없습니다.", status=400)
+            files.append(("files[1]", ("toggle_values.json", stack.enter_context(settings.open("rb")), "application/json")))
+          result = _json_request(transfer, "POST", _api(base, "tmux", "upload"), headers=authorization.headers, data=meta, files=files)
+        if result.get("files") != len(files):
+          raise G4UploadError("G4 서버에 저장된 tmux 파일 개수가 다릅니다.")
+        return {**result, "target": "g4", "serverUrl": base}
+      except G4UploadError as exc:
+        if attempt == 0 and authorization.refresh(exc):
+          continue
+        raise

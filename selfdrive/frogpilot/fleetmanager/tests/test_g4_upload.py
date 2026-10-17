@@ -45,6 +45,8 @@ class Session:
     data = kwargs.get("data")
     if hasattr(data, "read"):
       kwargs["data"] = data.read()
+    if "files" in kwargs:
+      kwargs["file_contents"] = [item[1][1].read() for item in kwargs["files"]]
     self.calls.append((method, url, kwargs))
     response = self.responses.popleft()
     if isinstance(response, Exception):
@@ -132,9 +134,9 @@ def test_failed_or_incorrect_file_response_never_reports_success(source, monkeyp
 
 
 def test_dropped_video_connection_reopens_at_zero_without_resending_rlog(source, monkeypatch):
-  sessions = [Session([Response({"ok": True, "token": "test-session"}), Response({"ok": True})]),
+  sessions = [Session([Response({"ok": True, "token": "test-session"})]),
               Session([Response({"ok": True, "size": 8})]), Session([requests.ConnectionError("Remote end closed connection without response")]),
-              Session([Response({"ok": True, "size": 10})])]
+              Session([Response({"ok": True, "size": 10})]), Session([Response({"ok": True})])]
   factory = iter(sessions)
   monkeypatch.setattr(g4_upload.requests, "Session", lambda: next(factory))
   waits = []
@@ -144,7 +146,7 @@ def test_dropped_video_connection_reopens_at_zero_without_resending_rlog(source,
   assert sessions[1].calls[0][2]["data"] == b"full log"
   assert sessions[2].calls[0][2]["data"] == sessions[3].calls[0][2]["data"] == b"road video"
   assert len(sessions[1].calls) == 1
-  assert sessions[0].calls[-1][1].endswith("/complete")
+  assert sessions[-1].calls[-1][1].endswith("/complete")
 
 
 @pytest.mark.parametrize("failure", [requests.ReadTimeout("timeout"), Response({"error": "temporary upstream failure"}, 502)])
@@ -214,15 +216,101 @@ def test_expired_session_is_renewed_before_upload(monkeypatch):
   assert g4_upload._session_token(session, "https://example.test", META, "dashcam") == "two"
 
 
-def test_rejected_cached_token_is_discarded_for_next_user_retry(source, monkeypatch):
+def test_rejected_cached_token_is_renewed_without_a_user_retry(source, monkeypatch):
   first = success_responses()
   first[0] = Response({"ok": True, "token": "old-token", "expiresIn": 14400})
   session = install_session(monkeypatch, [*first, Response({"error": "upload session IP mismatch"}, 403), *success_responses()])
   assert g4_upload.upload_segment(source.parent, SEGMENT, META)["ok"]
-  with pytest.raises(g4_upload.G4UploadError, match="HTTP 403"):
-    g4_upload.upload_segment(source.parent, SEGMENT, META)
   assert g4_upload.upload_segment(source.parent, SEGMENT, META)["ok"]
   assert len([url for _, url, _ in session.calls if url.endswith("/session")]) == 2
+
+
+@pytest.mark.parametrize(("status", "error"), [(403, "upload session IP mismatch"), (401, "expired upload session")])
+def test_rejected_file_session_is_renewed_and_same_file_is_rewound(source, monkeypatch, status, error):
+  responses = success_responses()
+  responses[2:2] = [Response({"error": error}, status), Response({"ok": True, "token": "fresh-session", "expiresIn": 14400})]
+  session = install_session(monkeypatch, responses)
+  result = g4_upload.upload_segment(source.parent, SEGMENT, META)
+  assert result["ok"]
+  puts = [args for method, _, args in session.calls if method == "PUT"]
+  assert [p["data"] for p in puts] == [b"full log", b"road video", b"road video"]
+  assert puts[-1]["headers"]["Authorization"] == "Bearer fresh-session"
+  assert session.calls[-1][2]["headers"]["Authorization"] == "Bearer fresh-session"
+
+
+def test_rejected_completion_session_is_renewed_without_retransmitting_files(source, monkeypatch):
+  responses = success_responses()[:-1]
+  responses += [Response({"error": "upload session IP mismatch"}, 403), Response({"ok": True, "token": "fresh-session"}),
+                Response({"ok": True})]
+  session = install_session(monkeypatch, responses)
+  assert g4_upload.upload_segment(source.parent, SEGMENT, META)["ok"]
+  assert len([call for call in session.calls if call[0] == "PUT"]) == 2
+  complete = [args for _, url, args in session.calls if url.endswith("/complete")]
+  assert [args["headers"]["Authorization"] for args in complete] == ["Bearer test-session", "Bearer fresh-session"]
+
+
+def test_session_renewal_and_completion_do_not_reuse_old_network_connections(source, monkeypatch):
+  sessions = [Session([Response({"ok": True, "token": "old"})]), Session([Response({"ok": True, "size": 8})]),
+              Session([Response({"error": "upload session IP mismatch"}, 403)]), Session([Response({"ok": True, "token": "fresh"})]),
+              Session([Response({"ok": True, "size": 10})]), Session([Response({"ok": True})])]
+  factory = iter(sessions)
+  monkeypatch.setattr(g4_upload.requests, "Session", lambda: next(factory))
+  assert g4_upload.upload_segment(source.parent, SEGMENT, META)["ok"]
+  assert all(len(session.calls) == 1 for session in sessions)
+  assert [session.calls[0][0] for session in sessions] == ["POST", "PUT", "PUT", "POST", "PUT", "POST"]
+  assert sessions[3].calls[0][1].endswith("/session")
+  assert sessions[5].calls[0][1].endswith("/complete")
+  assert sessions[4].calls[0][2]["data"] == b"road video"
+
+
+def test_repeated_ip_changes_stop_after_one_session_renewal(source, monkeypatch):
+  responses = [Response({"ok": True, "token": "old"}), Response({"error": "upload session IP mismatch"}, 403),
+               Response({"ok": True, "token": "fresh"}), Response({"error": "upload session IP mismatch"}, 403)]
+  session = install_session(monkeypatch, responses)
+  with pytest.raises(g4_upload.G4UploadError, match="IP mismatch"):
+    g4_upload.upload_segment(source.parent, SEGMENT, META)
+  assert len([url for _, url, _ in session.calls if url.endswith("/session")]) == 2
+  assert len([call for call in session.calls if call[0] == "PUT"]) == 2
+
+
+@pytest.mark.parametrize(("status", "error"), [(403, "upload session device mismatch"), (403, "upload session purpose mismatch"),
+                                             (401, "missing upload session"), (403, "access denied")])
+def test_other_authentication_failures_do_not_issue_more_sessions(source, monkeypatch, status, error):
+  session = install_session(monkeypatch, [Response({"ok": True, "token": "test-session"}), Response({"error": error}, status)])
+  with pytest.raises(g4_upload.G4UploadError, match=error):
+    g4_upload.upload_segment(source.parent, SEGMENT, META)
+  assert len(session.calls) == 2
+
+
+def test_failed_completion_session_renewal_preserves_files_saved_flag(source, monkeypatch):
+  session = install_session(monkeypatch, [*success_responses()[:-1], Response({"error": "upload session IP mismatch"}, 403),
+                                        Response({"error": "session service offline"}, 503)])
+  with pytest.raises(g4_upload.G4UploadError) as result:
+    g4_upload.upload_segment(source.parent, SEGMENT, META)
+  assert result.value.files_saved
+  assert len([call for call in session.calls if call[0] == "PUT"]) == 2
+
+
+def test_tmux_session_renewal_reopens_log_and_settings(tmp_path, monkeypatch):
+  log = tmp_path / "tmux.log"
+  settings = tmp_path / "toggle_values.json"
+  log.write_bytes(b"diagnostic log")
+  settings.write_bytes(b'{"dummy":true}')
+  session = install_session(monkeypatch, [Response({"ok": True, "token": "old"}), Response({"error": "upload session IP mismatch"}, 403),
+                                        Response({"ok": True, "token": "fresh"}), Response({"ok": True, "files": 2})])
+  assert g4_upload.upload_tmux(log, META, settings)["ok"]
+  uploads = [args for _, url, args in session.calls if url.endswith("/tmux/upload")]
+  assert [args["file_contents"] for args in uploads] == [[b"diagnostic log", b'{"dummy":true}']] * 2
+  assert uploads[-1]["headers"]["Authorization"] == "Bearer fresh"
+
+
+def test_daily_quota_error_is_distinguished_from_individual_file_size(source, monkeypatch):
+  message = "Maximum request body size 1073741824 exceeded, actual body size 1075651497"
+  session = install_session(monkeypatch, [Response({"ok": True, "token": "session"}), Response({"error": message}, 413)])
+  with pytest.raises(g4_upload.G4UploadError, match="일일 전송 한도") as result:
+    g4_upload.upload_segment(source.parent, SEGMENT, META)
+  assert result.value.status == 413
+  assert len([call for call in session.calls if call[0] == "PUT"]) == 1
 
 
 def test_completion_failure_reports_that_files_were_saved(source, monkeypatch):
