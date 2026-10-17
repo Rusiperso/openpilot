@@ -366,7 +366,8 @@ class CarController(CarControllerBase):
       # (이전엔 램프가 켜지면 신호를 끊어서 켜졌다 꺼졌다 반복). 자동 차선변경이 끝나면 해제. 문제시 원복
       # 2026-10-17 한 박자 늦음 수정: 차선변경 명령이 시작 직후 켜졌다 꺼졌다 해도, 한번 보내기 시작하면 명령이
       # 1초 넘게 꺼질 때까지 끊지 않고 마지막 방향으로 계속 보냄(예전엔 끊기면 차 램프가 꺼질 때까지 재시작 못 함). 문제시 원복
-      if hda2 and blinker_vals is not None and getattr(self, "auto_blinker_ok", False):
+      # 2026-10-17 크루즈(제어) 꺼진 상태에선 깜빡이 신호를 보내지 않음. 문제시 원복
+      if hda2 and blinker_vals is not None and getattr(self, "auto_blinker_ok", False) and CC.enabled:
         if CC.leftBlinker or CC.rightBlinker:
           self.auto_blinker_off_frames = 0
           self.auto_blinker_dir = (bool(CC.leftBlinker), bool(CC.rightBlinker))
@@ -395,7 +396,11 @@ class CarController(CarControllerBase):
         if self.frame < getattr(self, "hazard_until_frame", 0) and not getattr(self, "auto_blinker_sending", False):
           if getattr(self, "hazard_sending", False) or not (CS.out.leftBlinker and CS.out.rightBlinker):
             self.hazard_sending = True
-            can_sends.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, False, False, blinker_vals or (3, 4), hazard_val))
+            # 2026-10-17 비상등 불규칙 수정: 값 1을 계속 보내면 차가 불규칙하게 깜빡여서, 0.4초 켜고 0.4초 끄는 박자로 직접 보냄. 문제시 원복
+            if (self.frame // 40) % 2 == 0:
+              can_sends.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, False, False, blinker_vals or (3, 4), hazard_val))
+            else:
+              can_sends.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, False, False, blinker_vals or (3, 4)))
         else:
           self.hazard_sending = False
       else:
