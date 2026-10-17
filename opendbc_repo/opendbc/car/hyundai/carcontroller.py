@@ -379,6 +379,9 @@ class CarController(CarControllerBase):
           # 그 뒤 0.3초는 끄기 값(0)을 직접 보낸 다음 멈춤. 예전엔 1초 넘게 계속 켜 둠. 문제시 원복
           if self.auto_blinker_off_frames > 40:
             self.auto_blinker_sending = False
+            # 2026-10-17 깜빡이가 안 꺼지는 문제: 신호를 멈춰도 차가 램프를 붙잡고 있으면(실차에서 반대쪽 깜빡이를 켜야 꺼짐)
+            # 반대 방향 신호를 0.3초 한 번만 보내 끔(스틱을 반대로 미는 것과 같은 효과를 노림). 실차 확인 전. 문제시 원복
+            self.auto_blinker_cancel_frames = 30
       else:
         self.auto_blinker_sending = False
       if getattr(self, "auto_blinker_sending", False):
@@ -386,6 +389,15 @@ class CarController(CarControllerBase):
         if getattr(self, "auto_blinker_off_frames", 0) > 10:
           left_b = right_b = False  # 명령이 꺼진 지 0.1초가 지났으면 끄기 값(0)을 보냄
         can_sends.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, left_b, right_b, blinker_vals))
+
+      if getattr(self, "auto_blinker_cancel_frames", 0) > 0:
+        if (not getattr(self, "auto_blinker_sending", False)) and blinker_vals is not None and CC.enabled \
+            and (CS.out.leftBlinker or CS.out.rightBlinker) and not (CC.leftBlinker or CC.rightBlinker):
+          self.auto_blinker_cancel_frames -= 1
+          last_left, _last_right = getattr(self, "auto_blinker_dir", (False, False))
+          can_sends.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, not last_left, last_left, blinker_vals))
+        else:
+          self.auto_blinker_cancel_frames = 0
 
       # 2026-10-17 비상깜빡이 시험: 후진 기어(0.3초 이상 유지)를 넣으면 비상깜빡이를 켜고,
       # 후진을 벗어난 뒤 3초 더 유지. 운전자가 이미 비상깜빡이를 켰으면 건드리지 않음. Nda 스위치(autoBlinker)가 켜져 있을 때만. 문제시 원복
