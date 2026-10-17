@@ -397,7 +397,13 @@ class CarController(CarControllerBase):
             self.hazard_until_frame = self.frame + 300
         else:
           self.hazard_reverse_frames = 0
-        if self.frame < getattr(self, "hazard_until_frame", 0) and not getattr(self, "auto_blinker_sending", False):
+        # 2026-10-17 캔 에러 방지: 비상등을 보내는 중에 캔 에러(canValid 끊김)가 나면 즉시 멈추고, 시동을 다시 걸 때까지 비상등 전송을 막음. 문제시 원복
+        if hazard_sending_prev_bad := (getattr(self, "hazard_sending", False) and not CS.out.canValid):
+          self.hazard_blocked = True
+          self.hazard_until_frame = 0
+        if getattr(self, "hazard_blocked", False):
+          self.hazard_sending = False
+        elif self.frame < getattr(self, "hazard_until_frame", 0) and not getattr(self, "auto_blinker_sending", False):
           if getattr(self, "hazard_sending", False) or not (CS.out.leftBlinker and CS.out.rightBlinker):
             self.hazard_sending = True
             # 2026-10-17 비상등 불규칙 수정: 값 1을 계속 보내면 차가 불규칙하게 깜빡여서, 0.4초 켜고 0.4초 끄는 박자로 직접 보냄. 문제시 원복
