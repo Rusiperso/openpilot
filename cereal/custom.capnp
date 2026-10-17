@@ -42,6 +42,7 @@ struct CarrotMan @0x81c2f05a394cf4af {
 	naviPaths @27 : Text;
 	leftSec @28 : Int32;
 	xTurnModifier @29 : Int32; # 로터리 진출 방향(도 단위, 0=직진/12시, 시계방향). -999=값 없음
+	szNearDirName @30 : Text; # 안내 카드의 방면·방향 줄(예: "서분당IC 방면 우회전", "회전교차로 오른쪽 3시 방향")
 }
 
 struct CustomReserved1 @0xaedffd8f31e7b55d {
