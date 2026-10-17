@@ -375,12 +375,16 @@ class CarController(CarControllerBase):
             self.auto_blinker_sending = not (CS.out.leftBlinker or CS.out.rightBlinker)
         elif getattr(self, "auto_blinker_sending", False):
           self.auto_blinker_off_frames = getattr(self, "auto_blinker_off_frames", 0) + 1
-          if self.auto_blinker_off_frames > 100:
+          # 2026-10-17 차선변경이 끝나면 깜빡이를 바로 끔: 명령이 꺼진 뒤 0.1초만 마지막 방향을 유지하고(깜빡임 끊김 방지),
+          # 그 뒤 0.3초는 끄기 값(0)을 직접 보낸 다음 멈춤. 예전엔 1초 넘게 계속 켜 둠. 문제시 원복
+          if self.auto_blinker_off_frames > 40:
             self.auto_blinker_sending = False
       else:
         self.auto_blinker_sending = False
       if getattr(self, "auto_blinker_sending", False):
         left_b, right_b = getattr(self, "auto_blinker_dir", (False, False))
+        if getattr(self, "auto_blinker_off_frames", 0) > 10:
+          left_b = right_b = False  # 명령이 꺼진 지 0.1초가 지났으면 끄기 값(0)을 보냄
         can_sends.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, left_b, right_b, blinker_vals))
 
       # 2026-10-17 비상깜빡이 시험: 후진 기어(0.3초 이상 유지)를 넣으면 비상깜빡이를 켜고,
