@@ -557,6 +557,20 @@ class CarState(CarStateBase):
       right_blinker_lamp = blinkers_info["RIGHT_LAMP"] or blinkers_info["RIGHT_LAMP_ALT"]
       ret.leftBlinker, ret.rightBlinker = self.update_blinker_from_lamp(50, left_blinker_lamp, right_blinker_lamp)
 
+      # TEMP DEBUG: 후진 전후 램프 신호 원본 기록 (원인 확인 후 제거)
+      try:
+        import time
+        gs = self.gear_shifter
+        dbg = (str(gs), tuple(sorted((k, int(v)) for k, v in blinkers_info.items() if "LAMP" in k or "BLINKER" in k or "STALK" in k)))
+        if getattr(self, "_rdbg_last", None) != dbg and (gs == GearShifter.reverse or time.monotonic() - getattr(self, "_rdbg_t", -99) < 5):
+          if gs == GearShifter.reverse:
+            self._rdbg_t = time.monotonic()
+          with open("/data/media/0/reverse_dbg.log", "a") as f:
+            f.write("%.2f %s %s\n" % (time.time(), dbg[0], dict(dbg[1])))
+        self._rdbg_last = dbg
+      except Exception:
+        pass
+
     if self.CP.enableBsm:
       if self.cp_bsm is None:
         if 442 in cp.seen_addresses:
