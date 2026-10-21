@@ -13,6 +13,12 @@ from openpilot.selfdrive.controls.lib.desire_lib.constants import (
 from openpilot.selfdrive.controls.lib.desire_lib.side_state import SideState
 from openpilot.selfdrive.controls.lib.desire_lib.maneuver_classifier import classify_maneuver_type
 
+# 2026-10-17: 시스템(ATC/Carrot)이 직접 깜빡이를 켜고 하는 차선변경은 깜빡이를 최소 3번 깜빡인 뒤에 시작한다.
+# 깜빡이 한 번이 약 0.7~0.8초라 3번이면 약 2.2초, 램프가 켜지기까지 걸리는 시간을 더해 2.5초로 잡음. 실차 확인 전. 문제시 원복
+SYS_BLINK_MIN_SEC = 2.5
+# 시스템 차선변경이 시작 조건(빈 차선 등)을 못 맞춰 계속 기다리면 이 시간 뒤에 포기하고 깜빡이를 끈다.
+SYS_LC_WAIT_MAX_SEC = 10.0
+
 
 class DesireHelper:
   def __init__(self):
@@ -46,6 +52,12 @@ class DesireHelper:
     self.carrot_cmd_index_last = 0
     self.atc_type = ""
     self.atc_active = 0  # 0: 없음, 1: ATC 동작, 2: 충돌
+
+    # 2026-10-17: 시스템이 켠 깜빡이 차선변경 보호 (램프가 켜지면 그 램프가 다시 "운전자 깜빡이"로 읽혀서 생기던 문제 방지)
+    self.sys_lc_dir = BLINKER_NONE      # 시스템이 시작한 차선변경의 방향(없으면 BLINKER_NONE)
+    self.sys_lc_timer = 0.0             # 시스템 깜빡이를 켠 뒤 흐른 시간(초)
+    self.sys_echo_ignore = False        # 차선변경이 끝난 뒤 우리가 켠 램프가 꺼질 때까지 운전자 깜빡이로 안 봄
+    self.sys_done_atc_type = ""         # 이미 끝난 ATC 종류(같은 종류가 이어지는 동안 다시 시작하지 않음)
 
     # auto lane change
     self.auto_lane_change_enable = False
@@ -105,6 +117,14 @@ class DesireHelper:
   # ─────────────────────────────────────────────
   # blinkers/ATC (원본 로직 유지, side 계산은 별개)
   # ─────────────────────────────────────────────
+  def _release_sys_lc(self, ignore_echo=True):
+    """시스템이 켠 깜빡이 차선변경의 기억을 지운다. ignore_echo가 True면 남아 있는 우리 램프를 운전자 깜빡이로 오인하지 않는다."""
+    self.sys_lc_dir = BLINKER_NONE
+    self.sys_lc_timer = 0.0
+    if ignore_echo:
+      self.sys_echo_ignore = True
+      self.sys_done_atc_type = self.atc_type
+
   def _update_driver_blinker(self, carstate):
     st = carstate.leftBlinker * 1 + carstate.rightBlinker * 2
     changed = st != self.driver_blinker_state
@@ -237,6 +257,39 @@ class DesireHelper:
     driver_st, driver_changed, driver_enabled = self._update_driver_blinker(carstate)
     atc_st, atc_enabled = self._update_atc_blinker(carrotMan, driver_st)
 
+    # ── 시스템이 켠 깜빡이 차선변경 보호 (2026-10-17) ──
+    # 시스템이 깜빡이를 켜면 차 램프가 켜지고, 그 램프가 다시 "운전자 깜빡이"로 읽혀서
+    # (1) 깜빡이를 한 번 켜자마자 차선변경이 시작되고 (2) 차선변경이 끝나도 램프가 요청을 붙잡아 깜빡이가 안 꺼졌다.
+    # 시스템이 시작한 차선변경은 방향을 기억해 두고, 같은 방향 램프는 우리 신호의 메아리로 보아 운전자 깜빡이로 치지 않는다. 문제시 원복
+    if self.sys_done_atc_type:
+      if self.atc_type != self.sys_done_atc_type:
+        self.sys_done_atc_type = ""
+      else:
+        atc_st = BLINKER_NONE
+        atc_enabled = False
+    if self.sys_echo_ignore:
+      if driver_st == BLINKER_NONE:
+        self.sys_echo_ignore = False
+      else:
+        driver_enabled = False
+    if self.sys_lc_dir != BLINKER_NONE:
+      if driver_st not in (BLINKER_NONE, self.sys_lc_dir):
+        # 반대 방향 깜빡이는 운전자가 끼어든 것 - 시스템 차선변경을 접고 운전자에게 넘긴다
+        self._release_sys_lc(ignore_echo=False)
+      else:
+        driver_enabled = False
+        atc_st = self.sys_lc_dir
+        atc_enabled = True
+        self.sys_lc_timer += DT_MDL
+        if self.lane_change_state == LaneChangeState.preLaneChange and self.sys_lc_timer > SYS_LC_WAIT_MAX_SEC:
+          # 오래 기다려도 시작 조건이 안 맞으면 포기하고 깜빡이를 끈다
+          self.lane_change_state = LaneChangeState.off
+          self.lane_change_direction = LaneChangeDirection.none
+          self._release_sys_lc()
+          atc_st = BLINKER_NONE
+          atc_enabled = False
+    sys_lc_active = self.sys_lc_dir != BLINKER_NONE
+
     desire_enabled = driver_enabled or atc_enabled
     blinker_state = driver_st if driver_enabled else atc_st
 
@@ -331,6 +384,11 @@ class DesireHelper:
             self.auto_lane_change_enable = False if (lane_exist_counter_side > 0 or lane_change_available_geom) else True
             self.next_lane_change = False
 
+            # 시스템(ATC/Carrot)이 켠 깜빡이면 방향을 기억 - 이후 램프가 켜져도 운전자 깜빡이로 오인하지 않게
+            if atc_enabled and not driver_enabled and atc_st in (BLINKER_LEFT, BLINKER_RIGHT):
+              self.sys_lc_dir = atc_st
+              self.sys_lc_timer = 0.0
+
         elif self.lane_change_state == LaneChangeState.preLaneChange:
           if side is None:
             self.lane_change_state = LaneChangeState.off
@@ -364,7 +422,10 @@ class DesireHelper:
               start_gate = (side.lane_change_available_geom and self.lane_change_delay == 0) or \
                            side.lane_line_info_edge_detect or solid_line_blocked
 
-              if start_gate:
+              # 시스템이 켠 깜빡이는 최소 3번 깜빡인 뒤에 차선변경 시작 (2026-10-17)
+              blink_ready = (not sys_lc_active) or self.sys_lc_timer >= SYS_BLINK_MIN_SEC
+
+              if start_gate and blink_ready:
                 if solid_line_blocked:
                   if torque_applied and not (bsd_active and block_lanechange_bsd):
                     self.lane_change_state = LaneChangeState.laneChangeStarting
@@ -374,8 +435,8 @@ class DesireHelper:
                 elif self.laneChangeNeedTorque > 0 or self.next_lane_change:
                   if torque_applied:
                     self.lane_change_state = LaneChangeState.laneChangeStarting
-                elif driver_enabled:
-                  # driver blinker면 바로 시작(원본 유지)
+                elif driver_enabled or sys_lc_active:
+                  # driver blinker면 바로 시작(원본 유지). 시스템이 켠 깜빡이도 같은 취급(깜빡임 횟수는 blink_ready가 확인)
                   # 단, object/bzd 막힘은 side.lane_change_available에서 걸림
                   if side.lane_change_available:
                     self.lane_change_state = LaneChangeState.laneChangeStarting
@@ -394,11 +455,20 @@ class DesireHelper:
           self.lane_change_ll_prob = min(self.lane_change_ll_prob + DT_MDL, 1.0)
           if self.lane_change_ll_prob > 0.99:
             self.lane_change_direction = LaneChangeDirection.none
-            if desire_enabled:
+            if sys_lc_active:
+              # 시스템이 켠 깜빡이로 한 차선변경은 끝나면 깜빡이를 끈다 (자동 반복 없음) (2026-10-17)
+              self.lane_change_state = LaneChangeState.off
+              self.next_lane_change = False
+              self._release_sys_lc()
+            elif desire_enabled:
               self.lane_change_state = LaneChangeState.preLaneChange
               self.next_lane_change = True
             else:
               self.lane_change_state = LaneChangeState.off
+
+    # 시스템 차선변경이 어떤 이유로든(취소·속도·시간 초과 등) off가 되면 기억도 지운다 (2026-10-17)
+    if self.sys_lc_dir != BLINKER_NONE and self.lane_change_state == LaneChangeState.off:
+      self._release_sys_lc()
 
     # timer
     if self.lane_change_state in (LaneChangeState.off, LaneChangeState.preLaneChange):

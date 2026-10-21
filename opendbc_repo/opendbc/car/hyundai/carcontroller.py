@@ -1,3 +1,5 @@
+import os
+import time
 import numpy as np
 from opendbc.can import CANPacker
 from opendbc.car import Bus, DT_CTRL, apply_driver_steer_torque_limits, common_fault_avoidance, make_tester_present_msg, structs, apply_std_steer_angle_limits
@@ -155,6 +157,17 @@ class CarController(CarControllerBase):
 
     self.steerDeltaUpOrg = self.steerDeltaUp = self.steerDeltaUpLC = self.params.STEER_DELTA_UP
     self.steerDeltaDownOrg = self.steerDeltaDown = self.steerDeltaDownLC = self.params.STEER_DELTA_DOWN
+
+  def auto_blinker_log(self, msg):
+    # 2026-10-21 깜빡이 켜기 시험 기록 (보내기 시작/멈춤/막힘 이유). 파일이 커지면 기록 중단. 문제시 원복
+    try:
+      path = "/data/media/0/auto_blinker.log"
+      if os.path.exists(path) and os.path.getsize(path) > 200_000:
+        return
+      with open(path, "a") as f:
+        f.write("%.2f frame=%d %s\n" % (time.time(), self.frame, msg))
+    except Exception:
+      pass
 
   def update(self, CC, CS, now_nanos):
 
@@ -351,6 +364,66 @@ class CarController(CarControllerBase):
       # blinkers
       if hda2 and self.CP.flags & HyundaiFlags.ENABLE_BLINKERS:
         can_sends.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, CC.leftBlinker, CC.rightBlinker))
+
+      # 2026-10-21 깜빡이 켜기 시험(재도입, 안전장치 포함): Nda 스위치가 켜져 있고(깃발 파일이 10초 안에 갱신됨), 확인된 차종이며,
+      # 크루즈(제어)가 켜진 상태의 자동 차선변경 중에만 SPAS로 깜빡이 신호를 보냄. 문제시 원복
+      # - 운전자 깜빡이: 램프는 깜빡이며 꺼지는 순간이 있으므로 "최근 1초 안에 램프가 켜진 적 있으면" 운전자가 켠 것으로 보고 안 보냄
+      # - 캔 오류(canValid 끊김)가 나면 즉시 멈추고, 시동을 다시 걸 때까지 다시 보내지 않음
+      # - 한 번에 최대 10초만 보냄(넘으면 명령이 꺼질 때까지 쉼)
+      # - 보내기 시작/멈춤/막힘 이유를 /data/media/0/auto_blinker.log 에 기록
+      if self.frame % 20 == 0:
+        try:
+          self.auto_blinker_ok = (time.time() - os.path.getmtime("/dev/shm/auto_blinker_allowed")) < 10.0
+        except OSError:
+          self.auto_blinker_ok = False
+      blinker_vals = hyundaicanfd.BLINKER_CONTROL_VALUES.get(str(self.CP.carFingerprint))
+      if CS.out.leftBlinker or CS.out.rightBlinker:
+        self.auto_blinker_lamp_frame = self.frame
+      lamp_quiet = (self.frame - getattr(self, "auto_blinker_lamp_frame", -100000)) > 100
+      blinker_cmd = bool(CC.leftBlinker or CC.rightBlinker)
+      sending = getattr(self, "auto_blinker_sending", False)
+
+      if not CS.out.canValid and not getattr(self, "auto_blinker_blocked", False):
+        self.auto_blinker_blocked = True
+        self.auto_blinker_log("차단: 캔 오류(canValid 끊김) - 재시동 전까지 안 보냄 (보내는 중=%s)" % sending)
+      allowed = (hda2 and blinker_vals is not None and getattr(self, "auto_blinker_ok", False) and CC.enabled
+                 and not getattr(self, "auto_blinker_blocked", False))
+
+      if not blinker_cmd:
+        self.auto_blinker_cooldown = False
+      if allowed and blinker_cmd:
+        if not sending and not getattr(self, "auto_blinker_cooldown", False):
+          if lamp_quiet:
+            sending = True
+            self.auto_blinker_send_frames = 0
+            self.auto_blinker_log("시작: 방향=%s" % ("왼쪽" if CC.leftBlinker else "오른쪽"))
+          elif self.frame % 100 == 0:
+            self.auto_blinker_log("대기: 운전자 깜빡이가 최근 1초 안에 켜져 있었음")
+        if sending:
+          self.auto_blinker_off_frames = 0
+          self.auto_blinker_dir = (bool(CC.leftBlinker), bool(CC.rightBlinker))
+          self.auto_blinker_send_frames = getattr(self, "auto_blinker_send_frames", 0) + 1
+          if self.auto_blinker_send_frames > 1000:
+            sending = False
+            self.auto_blinker_cooldown = True
+            self.auto_blinker_log("멈춤: 10초 상한")
+      elif sending:
+        if not allowed:
+          sending = False
+          self.auto_blinker_log("멈춤: 조건 해제 (스위치/깃발=%s 크루즈=%s 차단=%s)" % (
+            getattr(self, "auto_blinker_ok", False), CC.enabled, getattr(self, "auto_blinker_blocked", False)))
+        else:
+          # 명령이 꺼진 뒤 0.1초는 마지막 방향을 유지(깜빡임 끊김 방지), 그 뒤 0.3초는 끄기 값(0)을 보낸 다음 멈춤
+          self.auto_blinker_off_frames = getattr(self, "auto_blinker_off_frames", 0) + 1
+          if self.auto_blinker_off_frames > 40:
+            sending = False
+            self.auto_blinker_log("멈춤: 차선변경 명령 종료")
+      self.auto_blinker_sending = sending
+      if sending:
+        left_b, right_b = getattr(self, "auto_blinker_dir", (False, False))
+        if getattr(self, "auto_blinker_off_frames", 0) > 10:
+          left_b = right_b = False
+        can_sends.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, left_b, right_b, blinker_vals))
 
       if self.camera_scc_params in [2, 3]:
         self.canfd_toggle_adas(CC, CS)
