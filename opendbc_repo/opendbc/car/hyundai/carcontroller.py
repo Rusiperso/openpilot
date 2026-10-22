@@ -161,7 +161,9 @@ class CarController(CarControllerBase):
   def auto_blinker_log(self, msg):
     # 2026-10-21 깜빡이 켜기 시험 기록 (보내기 시작/멈춤/막힘 이유). 파일이 커지면 기록 중단. 문제시 원복
     try:
-      path = "/data/media/0/auto_blinker.log"
+      # 플릿 매니저 "Error Logs"에서 바로 볼 수 있게 crashes 폴더에 기록(2026-10-22)
+      os.makedirs("/data/community/crashes", exist_ok=True)
+      path = "/data/community/crashes/auto_blinker.log"
       if os.path.exists(path) and os.path.getsize(path) > 200_000:
         return
       with open(path, "a") as f:
@@ -370,7 +372,7 @@ class CarController(CarControllerBase):
       # - 운전자 깜빡이: 램프는 깜빡이며 꺼지는 순간이 있으므로 "최근 1초 안에 램프가 켜진 적 있으면" 운전자가 켠 것으로 보고 안 보냄
       # - 캔 오류(canValid 끊김)가 나면 즉시 멈추고, 시동을 다시 걸 때까지 다시 보내지 않음
       # - 한 번에 최대 25초(회전 안내는 끝날 때까지 켜 둬야 해서 10초에서 늘림)만 보냄(넘으면 명령이 꺼질 때까지 쉼)
-      # - 보내기 시작/멈춤/막힘 이유를 /data/media/0/auto_blinker.log 에 기록
+      # - 보내기 시작/멈춤/막힘 이유를 /data/community/crashes/auto_blinker.log 에 기록(플릿 Error Logs에서 보임)
       if self.frame % 20 == 0:
         try:
           self.auto_blinker_ok = (time.time() - os.path.getmtime("/dev/shm/auto_blinker_allowed")) < 10.0
