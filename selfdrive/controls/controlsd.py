@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 import math
 import time
 from typing import SupportsFloat
@@ -57,6 +57,13 @@ class Controls:
 
     self.steer_limited_by_controls = False
     self.curvature = 0.0
+    self.blinker_hold_m = 0.0
+    self.blinker_hold_left = False
+    self.blinker_turned = False
+    self.blinker_turn_done = False
+    self.blinker_turn_dir = 0
+    self.blinker_turn_dist0 = 0.0
+    self.blinker_turn_traveled = 0.0
     self.desired_curvature = 0.0
 
     self.pose_calibrator = PoseCalibrator()
@@ -130,9 +137,54 @@ class Controls:
     actuators.longControlState = self.LoC.long_control_state
 
     # Enable blinkers while lane changing
+    # 2026-10-22 깜빡이 유지: 차선변경이 끝나도, 회전(좌/우회전 안내)이 끝나도 10m 더 직진할 때까지 깜빡이 명령 유지.
+    # 회전은 안내 거리가 5초 이내(40~150m)로 들어오면 시작, 교차로 40m 안에서 핸들을 30도 넘게 꺾었다가 12도 아래로 펴지면 끝난 것으로 봄(2026-10-22 실주행 로그로 맞춤: 우회전 때 핸들 77~356도, 28~76m 이동)
+    # (회전 지점을 80m 더 지나도 못 알아차리면 강제로 끝). 실제 전송은 carcontroller 안전장치(Nda 스위치·운전자 램프·25초 상한)를 거침. 문제시 원복
     if model_v2.meta.laneChangeState != LaneChangeState.off:
       CC.leftBlinker = model_v2.meta.laneChangeDirection == LaneChangeDirection.left
       CC.rightBlinker = model_v2.meta.laneChangeDirection == LaneChangeDirection.right
+      self.blinker_hold_m = 10.0
+      self.blinker_hold_left = bool(CC.leftBlinker)
+      self.blinker_turned = False
+      self.blinker_turn_dir = 0
+    elif CC.enabled:
+      carrot = self.sm['carrotMan']
+      turn_dist = carrot.xDistToTurn
+      steer = abs(CS.steeringAngleDeg)
+      step = max(CS.vEgo, 0.0) * DT_CTRL
+      if self.blinker_hold_m > 0.0:
+        self.blinker_hold_m -= step
+        CC.leftBlinker = self.blinker_hold_left
+        CC.rightBlinker = not self.blinker_hold_left
+      elif self.blinker_turn_dir:
+        # 회전 중: 교차로를 지나면 안내 거리가 9997m 같은 다음 안내로 바로 튀므로, 시작할 때 거리와 주행거리로 따라감
+        self.blinker_turn_traveled += step
+        if steer >= 30.0 and self.blinker_turn_traveled >= self.blinker_turn_dist0 - 40.0:
+          self.blinker_turned = True
+        if self.blinker_turned and steer < 12.0:
+          self.blinker_hold_m = 10.0  # 회전이 끝남 - 10m 더
+          self.blinker_hold_left = self.blinker_turn_dir == 1
+          self.blinker_turn_dir = 0
+        elif self.blinker_turn_traveled > self.blinker_turn_dist0 + 80.0:
+          self.blinker_turn_dir = 0  # 회전을 못 알아차리면 강제로 끝
+        else:
+          CC.leftBlinker = self.blinker_turn_dir == 1
+          CC.rightBlinker = self.blinker_turn_dir == 2
+      elif carrot.xTurnInfo in (1, 2) and 15.0 <= turn_dist <= min(150.0, max(40.0, CS.vEgo * 5.0)) and not self.blinker_turn_done:
+        self.blinker_turn_dir = int(carrot.xTurnInfo)
+        self.blinker_turn_dist0 = float(turn_dist)
+        self.blinker_turn_traveled = 0.0
+        self.blinker_turned = False
+        self.blinker_turn_done = True  # 같은 안내로는 한 번만
+        CC.leftBlinker = self.blinker_turn_dir == 1
+        CC.rightBlinker = self.blinker_turn_dir == 2
+      if carrot.xTurnInfo not in (1, 2) or turn_dist > 150.0:
+        self.blinker_turn_done = False
+    else:
+      self.blinker_hold_m = 0.0
+      self.blinker_turn_dir = 0
+      self.blinker_turned = False
+      self.blinker_turn_done = False
 
     if not CC.latActive:
       self.LaC.reset()
