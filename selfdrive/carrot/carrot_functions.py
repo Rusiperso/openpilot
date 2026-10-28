@@ -571,7 +571,7 @@ class CarrotPlanner:
         self.slow_lead_beeps = 0
     self.slow_lead_gap = max(0, self.slow_lead_gap - 1)
     if slow_lead and self.slow_lead_count > 1.0 / DT_MDL and self.slow_lead_beeps < 2 and self.slow_lead_gap == 0:
-      self.events.add(EventName.audioPrompt)
+      self.events.add(EventName.audio10)  # audio_10.wav = 띠링 소리(2026-10-28 새로 만듦)
       self.slow_lead_beeps += 1
       self.slow_lead_gap = int(0.8 / DT_MDL)
     self.mySafeFactor = 1.0
