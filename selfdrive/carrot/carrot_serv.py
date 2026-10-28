@@ -771,7 +771,8 @@ class CarrotServ:
     turn_dist_for_speed = self.autoTurnControlTurnEnd * turn_speed / 3.6 # 5
     fork_dist_for_speed = self.autoTurnControlTurnEnd * fork_speed / 3.6 # 5
     stop_dist_for_speed = 5
-    start_fork_dist = np.interp(self.nRoadLimitSpeed, [30, 50, 100], [160, 200, 350])
+    # 2026-10-28 콤마 차속 반영: 같은 표(160/200/350m)를 도로 제한속도가 아니라 콤마 차속으로 읽음. 표 값은 그대로. 문제시 원복
+    start_fork_dist = np.interp(v_ego_kph, [30, 50, 100], [160, 200, 350])
     start_turn_dist = np.interp(self.nTBTNextRoadWidth, [5, 10], [43, 60])
     turn_info_mapping = {
         1: {"type": "turn left", "speed": turn_speed, "dist": turn_dist_for_speed, "start": start_fork_dist},

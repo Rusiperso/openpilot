@@ -113,6 +113,10 @@ class CarrotPlanner:
     self.comfort_brake = self.comfortBrake
 
     self.soft_hold_active = 0
+    self.slow_lead_count = 0       # 앞차가 느린 상태가 이어진 프레임 수
+    self.slow_lead_beeps = 0       # 이번 앞차에 이미 낸 알림음 횟수(2번이면 끝)
+    self.slow_lead_gap = 0         # 알림음 사이 간격 프레임
+    self.slow_lead_clear = 0       # 앞차가 안 느린 상태가 이어진 프레임 수
     self.events = Events()
     self.myDrivingMode = DrivingMode(self.params.get_int("MyDrivingMode"))
     self.myDrivingMode_last = self.myDrivingMode
@@ -554,6 +558,22 @@ class CarrotPlanner:
     v_ego_cluster_kph = v_ego_cluster * CV.MS_TO_KPH
 
     leadOne = radarstate.leadOne
+    # 2026-10-28 앞차 느림 알림음: 앞차가 확실히 잡혔고 내 속도의 80% 이하인데 내가 60km/h 이상으로 크루즈로 달리면 알림음 2번만 울림.
+    # 페달을 밟고 있으면 안 울림. 앞차가 사라지거나 느리지 않게 3초 이어지면 다시 대기. 문제시 원복
+    slow_lead = bool(leadOne.status) and v_ego_kph >= 60.0 and leadOne.dRel < 150.0 and leadOne.vLead < v_ego * 0.8                 and carstate.cruiseState.enabled and not carstate.gasPressed and not carstate.brakePressed
+    if slow_lead:
+      self.slow_lead_clear = 0
+      self.slow_lead_count += 1
+    else:
+      self.slow_lead_count = 0
+      self.slow_lead_clear += 1
+      if self.slow_lead_clear > 3.0 / DT_MDL:
+        self.slow_lead_beeps = 0
+    self.slow_lead_gap = max(0, self.slow_lead_gap - 1)
+    if slow_lead and self.slow_lead_count > 1.0 / DT_MDL and self.slow_lead_beeps < 2 and self.slow_lead_gap == 0:
+      self.events.add(EventName.audioPrompt)
+      self.slow_lead_beeps += 1
+      self.slow_lead_gap = int(0.8 / DT_MDL)
     self.mySafeFactor = 1.0
     if self.myDrivingMode == DrivingMode.Eco: # eco
       self.mySafeFactor = self.myEcoModeFactor
