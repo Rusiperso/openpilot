@@ -1,3 +1,5 @@
+import os
+import time
 from opendbc.car import Bus, get_safety_config, structs
 from opendbc.car.hyundai.hyundaicanfd import CanBus
 from opendbc.car.hyundai.values import HyundaiFlags, CAR, DBC, CANFD_RADAR_SCC_CAR, \
@@ -45,6 +47,14 @@ class CarInterface(CarInterfaceBase):
     CAN = CanBus(None, fingerprint, hda2)
 
     if ret.flags & HyundaiFlags.CANFD:
+      # 2026-10-28 깜빡이 켜기 조사: 순정 SPAS(0x165=24바이트, 0x16A=32바이트)가 시동 때 실제로 보이는지 기록(기록만, 동작 변경 없음)
+      try:
+        if os.path.isdir("/data/community/crashes"):
+          seen = {b: (fingerprint.get(b, {}).get(0x165), fingerprint.get(b, {}).get(0x16A)) for b in (0, 1, 2)}
+          with open("/data/community/crashes/auto_blinker.log", "a") as f:
+            f.write("%.2f 지문: ECAN=%d 버스별(0x165,0x16A 길이; None=안 보임)=%s\n" % (time.time(), CAN.ECAN, seen))
+      except Exception:
+        pass
       # Shared configuration for CAN-FD cars
       ret.alphaLongitudinalAvailable = True #candidate not in (CANFD_UNSUPPORTED_LONGITUDINAL_CAR | CANFD_RADAR_SCC_CAR)
       #ret.enableBsm = 0x1e5 in fingerprint[CAN.ECAN]

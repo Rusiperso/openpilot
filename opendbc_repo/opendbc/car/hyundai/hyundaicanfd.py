@@ -696,6 +696,33 @@ def _make_ccnc_values(values, CS, lat_active, frame, hud_control,
     if blink_pairs:
       _apply_radar_blink(values, blink_pairs, frame, t=blink_t)
 
+# 2026-10-28 558 A 이식: 점선은 점선으로, 모델이 못 보는 차선은 계기판에서 지움. 문제시 원복
+# 아이오닉5 PE 계기판에서 찾은 값이라 쏘렌토 계기판에서 확인 필요(14=아무것도 안 그림, 8=흰 점선, 10=초록 점선)
+LANE_LINE_UNSEEN = 14
+# 모델 laneLineProbs(저속, 밤): 주차장 0.01~0.04, 시내 정차 0.13~0.22, 고속 ~1.0
+LANE_HIDE_PROB, LANE_SHOW_PROB, LANE_HIDE_FRAMES = 0.08, 0.12, 100  # 0.08 미만이 1초 지속되면 숨김, 0.12부터 다시 보임
+
+
+def _lane_unseen(state, side, prob, frame):
+  hidden, low_since = state.get(side, (False, None))
+  if prob >= LANE_SHOW_PROB:
+    hidden, low_since = False, None
+  elif prob < LANE_HIDE_PROB:
+    low_since = frame if low_since is None else low_since
+    hidden = hidden or frame - low_since >= LANE_HIDE_FRAMES
+  else:
+    low_since = None  # 중간값: 현재 상태 유지
+  state[side] = (hidden, low_since)
+  return hidden
+
+
+def _dashed_lane_line(color, lane_line):
+  # 카메라가 점선(또는 DLM 안쪽 점선)이라고 하면 흰색 2→8, 초록 6→10 (색 0=차선 정보 없음, 주황·실선은 그대로)
+  if lane_line // 10 > 0 and lane_line % 10 in (0, 5):
+    return {2: 8, 6: 10}.get(color, color)
+  return color
+
+
 def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
                          disp_angle, left_lane_warning, right_lane_warning,
                          enable_corner_radar, stopping, canfd_debug):
@@ -725,7 +752,13 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         if  HDA_LFA_SymSta == 0 and 0 < frame % 200 < 12:
           values["LFA_BTN"] = 1
 
-        if CC.enabled:          
+        # 2026-10-28 558 C 이식: 크루즈가 꺼져 있어도 순정 메인이 꺼져 있으면 눌러 켜둠 → 크루즈 켜기 전에도 옆 차·앞차가 계기판에 보임.
+        # 운전자가 메인 버튼으로 직접 끈 경우(manual_main_off_latched)는 누르지 않음. 속도 조건(3km/h 초과)은 유지. 문제시 이 블록만 삭제
+        if not CC.enabled and not CS.MainMode_ACC and not CS.manual_main_off_latched and \
+           10 < frame % 200 <= 16 and CS.out.vEgo > 3.:
+          values["ADAPTIVE_CRUISE_MAIN_BTN"] = 1
+
+        if CC.enabled:
           if not CS.MainMode_ACC:
             if 10 < frame % 200 <= 16 and CS.out.vEgo > 3.:
               values["ADAPTIVE_CRUISE_MAIN_BTN"] = 1
@@ -815,6 +848,11 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         values["LANELINE_CURVATURE"] = (min(abs(curvature), 15) + (-1 if curvature < 0 else 0)) if lat_active else 0
         values["LANELINE_CURVATURE_DIRECTION"] = 1 if curvature < 0 and lat_active else 0
 
+        lane_probs = md.laneLineProbs if md is not None and len(md.laneLineProbs) >= 3 else None
+        unseen = create_ccnc_messages.__dict__.setdefault('_lane_unseen', {})
+        left_seen = hud_control.leftLaneVisible and not (lane_probs is not None and _lane_unseen(unseen, 'L', lane_probs[1], frame))
+        right_seen = hud_control.rightLaneVisible and not (lane_probs is not None and _lane_unseen(unseen, 'R', lane_probs[2], frame))
+
         lane_color = 6 if md is not None and md.meta.laneChangeAvailableLeft else 2
         if lane_line_check >= 1:
           lane_line_warn_left = CS.out.leftLaneLine % 10 not in (0, 5)   # 실선이면 주황
@@ -824,7 +862,9 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         if hud_control.leftLaneDepart:
           values["LANELINE_LEFT"] = 4 if (frame // 50) % 2 == 0 else 1
         else:
-          values["LANELINE_LEFT"] = lane_color if hud_control.leftLaneVisible else 0
+          #문제시 원복
+          #values["LANELINE_LEFT"] = lane_color if hud_control.leftLaneVisible else 0
+          values["LANELINE_LEFT"] = _dashed_lane_line(lane_color, CS.out.leftLaneLine) if left_seen or lane_color == 4 else LANE_LINE_UNSEEN  # 주황은 안 지움
 
         lane_color = 6 if md is not None and md.meta.laneChangeAvailableRight else 2
         if lane_line_check >= 1:
@@ -835,7 +875,9 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         if hud_control.rightLaneDepart:
           values["LANELINE_RIGHT"] = 4 if (frame // 50) % 2 == 0 else 1
         else:
-          values["LANELINE_RIGHT"] = lane_color if hud_control.rightLaneVisible else 0
+          #문제시 원복
+          #values["LANELINE_RIGHT"] = lane_color if hud_control.rightLaneVisible else 0
+          values["LANELINE_RIGHT"] = _dashed_lane_line(lane_color, CS.out.rightLaneLine) if right_seen or lane_color == 4 else LANE_LINE_UNSEEN
 
         values["LCA_LEFT_ARROW"] = 2 if CS.out.leftBlinker else 0
         values["LCA_RIGHT_ARROW"] = 2 if CS.out.rightBlinker else 0

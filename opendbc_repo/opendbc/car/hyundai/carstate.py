@@ -138,6 +138,7 @@ class CarState(CarStateBase):
 
     self.cruise_buttons_alt =  True if self.CP.carFingerprint in (CAR.HYUNDAI_CASPER, CAR.HYUNDAI_CASPER_EV) else False
     self.MainMode_ACC = False
+    self.manual_main_off_latched = False  # 2026-10-28 558 C 이식: 운전자가 메인 버튼으로 직접 끈 상태(콤마가 순정 메인을 다시 누르지 않게)
     self.ACCMode = 0
     self.LFA_ICON = 0
     self.paddle_button_prev = 0
@@ -577,6 +578,7 @@ class CarState(CarStateBase):
       cruise_button = cp.vl[self.cruise_btns_msg_canfd]["CRUISE_BUTTONS"]
     if cruise_button in [Buttons.RES_ACCEL, Buttons.SET_DECEL] and self.CP.openpilotLongitudinalControl:
       self.main_enabled = True
+      self.manual_main_off_latched = False
     # CAN FD cars enable on main button press, set available if no TCS faults preventing engagement
     ret.cruiseState.available = self.main_enabled #cp.vl["TCS"]["ACCEnable"] == 0
     if self.CP.flags & HyundaiFlags.CAMERA_SCC.value:
@@ -588,7 +590,11 @@ class CarState(CarStateBase):
       # These are not used for engage/disengage since openpilot keeps track of state using the buttons
       ret.cruiseState.enabled = cp.vl["TCS"]["ACC_REQ"] == 1
       ret.cruiseState.standstill = False
-      if self.MainMode_ACC or self.main_enabled:
+      #문제시 원복
+      #if self.MainMode_ACC or self.main_enabled:
+      #  self.main_enabled = True
+      # 운전자가 메인 버튼으로 직접 끈 직후에는 카메라가 아직 켜짐으로 알려도 되살리지 않음
+      if self.MainMode_ACC and not self.manual_main_off_latched:
         self.main_enabled = True
     else:
       cp_cruise_info = cp_cam if self.CP.flags & HyundaiFlags.CANFD_CAMERA_SCC else cp
@@ -727,6 +733,7 @@ class CarState(CarStateBase):
       self.main_buttons.extend(cp.vl_all[self.cruise_btns_msg_canfd]["ADAPTIVE_CRUISE_MAIN_BTN"])
     if self.main_buttons[-1] != prev_main_buttons and not self.main_buttons[-1]: # and self.CP.openpilotLongitudinalControl: #carrot
       self.main_enabled = not self.main_enabled
+      self.manual_main_off_latched = not self.main_enabled
       print("main_enabled = {}".format(self.main_enabled))
     self.buttons_counter = cp.vl[self.cruise_btns_msg_canfd]["COUNTER"]
     ret.accFaulted = cp.vl["TCS"]["ACCEnable"] != 0  # 0 ACC CONTROL ENABLED, 1-3 ACC CONTROL DISABLED

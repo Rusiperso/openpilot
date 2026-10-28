@@ -398,6 +398,7 @@ class CarController(CarControllerBase):
           if lamp_quiet:
             sending = True
             self.auto_blinker_send_frames = 0
+            self.auto_blinker_lit_logged = False
             self.auto_blinker_log("시작: 방향=%s" % ("왼쪽" if CC.leftBlinker else "오른쪽"))
           elif self.frame % 100 == 0:
             self.auto_blinker_log("대기: 운전자 깜빡이가 최근 1초 안에 켜져 있었음")
@@ -405,6 +406,15 @@ class CarController(CarControllerBase):
           self.auto_blinker_off_frames = 0
           self.auto_blinker_dir = (bool(CC.leftBlinker), bool(CC.rightBlinker))
           self.auto_blinker_send_frames = getattr(self, "auto_blinker_send_frames", 0) + 1
+          # 2026-10-28 점등 확인 기록(기록만): 보낸 뒤 계기판 램프가 실제로 켜졌는지. 시작 전 1초간 램프가 꺼져 있었으므로 켜지면 우리 신호 때문
+          if not getattr(self, "auto_blinker_lit_logged", True):
+            if CS.out.leftBlinker or CS.out.rightBlinker:
+              self.auto_blinker_lit_logged = True
+              self.auto_blinker_log("점등 확인: %d프레임 만에 램프 켜짐 (왼쪽=%s 오른쪽=%s)" % (
+                self.auto_blinker_send_frames, CS.out.leftBlinker, CS.out.rightBlinker))
+            elif self.auto_blinker_send_frames == 200:
+              self.auto_blinker_lit_logged = True
+              self.auto_blinker_log("점등 안 됨: 보낸 지 2초가 지나도 램프가 안 켜짐")
           if self.auto_blinker_send_frames > 1000:
             sending = False
             self.auto_blinker_cooldown = True
