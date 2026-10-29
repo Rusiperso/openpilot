@@ -371,7 +371,7 @@ class CarController(CarControllerBase):
       # 크루즈(제어)가 켜진 상태의 자동 차선변경 중에만 SPAS로 깜빡이 신호를 보냄. 문제시 원복
       # - 운전자 깜빡이: 램프는 깜빡이며 꺼지는 순간이 있으므로 "최근 1초 안에 램프가 켜진 적 있으면" 운전자가 켠 것으로 보고 안 보냄
       # - 캔 오류(canValid 끊김)가 나면 즉시 멈추고, 시동을 다시 걸 때까지 다시 보내지 않음
-      # - 한 번에 최대 10초만 보냄(넘으면 명령이 꺼질 때까지 쉼)
+      # - 한 번에 최대 30초만 보냄(넘으면 명령이 꺼질 때까지 쉼). 10초였는데 차선변경 준비가 10초쯤 걸려 시작 직전에 꺼져서 30초로 늘림(2026-10-29)
       # - 보내기 시작/멈춤/막힘 이유를 /data/community/crashes/auto_blinker.log 에 기록(플릿 Error Logs에서 보임)
       if self.frame % 20 == 0:
         try:
@@ -415,10 +415,10 @@ class CarController(CarControllerBase):
             elif self.auto_blinker_send_frames == 200:
               self.auto_blinker_lit_logged = True
               self.auto_blinker_log("점등 안 됨: 보낸 지 2초가 지나도 램프가 안 켜짐")
-          if self.auto_blinker_send_frames > 1000:
+          if self.auto_blinker_send_frames > 3000:
             sending = False
             self.auto_blinker_cooldown = True
-            self.auto_blinker_log("멈춤: 10초 상한")
+            self.auto_blinker_log("멈춤: 30초 상한")
       elif sending:
         if not allowed:
           sending = False
