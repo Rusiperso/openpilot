@@ -700,12 +700,13 @@ def _make_ccnc_values(values, CS, lat_active, frame, hud_control,
 # 아이오닉5 PE 계기판에서 찾은 값이라 쏘렌토 계기판에서 확인 필요(14=아무것도 안 그림, 8=흰 점선, 10=초록 점선)
 LANE_LINE_UNSEEN = 14
 # 모델 laneLineProbs(저속, 밤): 주차장 0.01~0.04, 시내 정차 0.13~0.22, 고속 ~1.0
-LANE_HIDE_PROB, LANE_SHOW_PROB, LANE_HIDE_FRAMES = 0.08, 0.12, 100  # 0.08 미만이 1초 지속되면 숨김, 0.12부터 다시 보임
+LANE_HIDE_PROB, LANE_SHOW_PROB, LANE_HIDE_FRAMES = 0.08, 0.12, 200  # 0.08 미만이 2초 지속되면 숨김(실주행 기록에서 1초는 깜빡임이 잦았음), 0.12부터 다시 보임
 
 
-def _lane_unseen(state, side, prob, frame):
+def _lane_unseen(state, side, prob, frame, cam_sees=False):
+  # cam_sees: 순정 카메라가 그 선을 보고 있으면(차선 종류값 10 이상) 모델 확률이 낮아도 숨기지 않음
   hidden, low_since = state.get(side, (False, None))
-  if prob >= LANE_SHOW_PROB:
+  if prob >= LANE_SHOW_PROB or cam_sees:
     hidden, low_since = False, None
   elif prob < LANE_HIDE_PROB:
     low_since = frame if low_since is None else low_since
@@ -749,7 +750,10 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
       if CS.cruise_buttons_msg is not None:
         values = copy.copy(CS.cruise_buttons_msg)
 
-        if  HDA_LFA_SymSta == 0 and 0 < frame % 200 < 12:
+        #문제시 원복
+        #if  HDA_LFA_SymSta == 0 and 0 < frame % 200 < 12:
+        # 2026-10-29 실주행 기록: 5프레임(0.1초) 신호는 카메라가 무시, 운전자 실제 눌림은 6~10프레임이라 10프레임으로 늘림
+        if  HDA_LFA_SymSta == 0 and 0 < frame % 200 < 22:
           values["LFA_BTN"] = 1
 
         # 2026-10-28 558 C 이식: 크루즈가 꺼져 있어도 순정 메인이 꺼져 있으면 눌러 켜둠 → 크루즈 켜기 전에도 옆 차·앞차가 계기판에 보임.
@@ -850,8 +854,8 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
 
         lane_probs = md.laneLineProbs if md is not None and len(md.laneLineProbs) >= 3 else None
         unseen = create_ccnc_messages.__dict__.setdefault('_lane_unseen', {})
-        left_seen = hud_control.leftLaneVisible and not (lane_probs is not None and _lane_unseen(unseen, 'L', lane_probs[1], frame))
-        right_seen = hud_control.rightLaneVisible and not (lane_probs is not None and _lane_unseen(unseen, 'R', lane_probs[2], frame))
+        left_seen = hud_control.leftLaneVisible and not (lane_probs is not None and _lane_unseen(unseen, 'L', lane_probs[1], frame, CS.out.leftLaneLine >= 10))
+        right_seen = hud_control.rightLaneVisible and not (lane_probs is not None and _lane_unseen(unseen, 'R', lane_probs[2], frame, CS.out.rightLaneLine >= 10))
 
         lane_color = 6 if md is not None and md.meta.laneChangeAvailableLeft else 2
         if lane_line_check >= 1:
