@@ -664,6 +664,21 @@ class CarrotServ:
 
     return sdi_map.get(nSdiType, "")
 
+  def _get_incident_descr(self, nSdiType, nSdiDist):
+    # 돌발정보(국가교통정보센터 사고·공사·재난): TmapNda 앱이 nSdiType 90/91/92 로 보내며, 제한속도는 0이라 감속과 무관.
+    # 안내 카드의 초록 상자에 거리까지 붙여서 "사고발생 410m 앞" 형태로 보여준다. #문제시 원복(이 함수와 호출부 삭제)
+    names_ko = {90: "사고발생", 91: "공사중", 92: "재난발생"}
+    names_en = {90: "Accident", 91: "Roadwork", 92: "Hazard"}
+    names = names_ko if self.lang == "ko" else names_en
+    name = names.get(nSdiType)
+    if name is None:
+      return None
+    d = int(nSdiDist) if nSdiDist is not None else 0
+    if d <= 0:
+      return name
+    dist = f"{d}m" if d < 1000 else f"{d / 1000.0:.1f}km"
+    return f"{name} {dist} 앞" if self.lang == "ko" else f"{name} {dist} ahead"
+
   def _update_sdi(self):
     #sdiBlockType
     # 1: startOSEPS: 구간단속시작
@@ -1149,7 +1164,8 @@ class CarrotServ:
 
     msg.carrotMan.nGoPosDist = self.nGoPosDist
     msg.carrotMan.nGoPosTime = self.nGoPosTime
-    msg.carrotMan.szSdiDescr = self._get_sdi_descr(-1 if self.nSdiType == 0 and self.nSdiDist == 0 else self.nSdiType)
+    incident_descr = self._get_incident_descr(self.nSdiType, self.nSdiDist)
+    msg.carrotMan.szSdiDescr = incident_descr if incident_descr is not None else self._get_sdi_descr(-1 if self.nSdiType == 0 and self.nSdiDist == 0 else self.nSdiType)
 
     #coords_str = ";".join([f"{x},{y}" for x, y in coords])
     coords_str = ";".join([f"{x:.2f},{y:.2f},{d:.2f}" for (x, y), d in zip(coords, distances, strict=False)])
