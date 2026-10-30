@@ -385,9 +385,27 @@ class CarController(CarControllerBase):
       blinker_cmd = bool(CC.leftBlinker or CC.rightBlinker)
       sending = getattr(self, "auto_blinker_sending", False)
 
+      # 2026-10-30 운전자 우선: 차선변경 명령이 켜진 채로 램프가 켜져 있으면(우리가 안 보내는 중) 운전자가 켠 차선변경으로 보고,
+      # 그 명령이 끝날 때까지 안 보냄. 운전자가 깜빡이를 켰다 끄면 1초 뒤 우리가 다시 켜던 문제(10/30 주행 로그 17건) 수정
+      if not blinker_cmd:
+        self.auto_blinker_driver_owned = False
+      elif (not sending and not getattr(self, "auto_blinker_cooldown", False)
+            and (CS.out.leftBlinker or CS.out.rightBlinker)):
+        if not getattr(self, "auto_blinker_driver_owned", False):
+          self.auto_blinker_log("운전자 차선변경: 명령이 끝날 때까지 안 보냄")
+        self.auto_blinker_driver_owned = True
+      driver_owned = getattr(self, "auto_blinker_driver_owned", False)
+
       if not CS.out.canValid and not getattr(self, "auto_blinker_blocked", False):
         self.auto_blinker_blocked = True
         self.auto_blinker_log("차단: 캔 오류(canValid 끊김) - 재시동 전까지 안 보냄 (보내는 중=%s)" % sending)
+      # 2026-10-30 보내는 도중 캔 오류 카운터가 2 이상 늘면 끊기기 전에 멈춤(로그상 버스 오프 1.2초 전에 오른 사례 있음, 대부분은 이후에 오름)
+      if sending and not getattr(self, "auto_blinker_blocked", False):
+        err_now = CS.out.canErrorCounter
+        if err_now - getattr(self, "auto_blinker_err_base", err_now) >= 2:
+          self.auto_blinker_blocked = True
+          self.auto_blinker_log("차단: 보내는 중 캔 오류 카운터 증가 (%d -> %d) - 재시동 전까지 안 보냄" % (
+            getattr(self, "auto_blinker_err_base", err_now), err_now))
       allowed = (hda2 and blinker_vals is not None and getattr(self, "auto_blinker_ok", False) and CC.enabled
                  and not getattr(self, "auto_blinker_blocked", False))
 
@@ -395,12 +413,13 @@ class CarController(CarControllerBase):
         self.auto_blinker_cooldown = False
       if allowed and blinker_cmd:
         if not sending and not getattr(self, "auto_blinker_cooldown", False):
-          if lamp_quiet:
+          if lamp_quiet and not driver_owned:
             sending = True
             self.auto_blinker_send_frames = 0
             self.auto_blinker_lit_logged = False
+            self.auto_blinker_err_base = CS.out.canErrorCounter
             self.auto_blinker_log("시작: 방향=%s" % ("왼쪽" if CC.leftBlinker else "오른쪽"))
-          elif self.frame % 100 == 0:
+          elif not lamp_quiet and self.frame % 100 == 0:
             self.auto_blinker_log("대기: 운전자 깜빡이가 최근 1초 안에 켜져 있었음")
         if sending:
           self.auto_blinker_off_frames = 0
