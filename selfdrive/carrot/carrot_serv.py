@@ -101,6 +101,7 @@ class CarrotServ:
     self.active_kisa_count = 0
 
     self.nSdiType = -1
+    self.szIncidentText = ""
     self.nSdiSpeedLimit = 0
     self.nSdiSection = 0
     self.nSdiDist = 0
@@ -667,8 +668,10 @@ class CarrotServ:
   def _get_incident_descr(self, nSdiType, nSdiDist):
     # 돌발정보(국가교통정보센터 사고·공사·재난): TmapNda 앱이 nSdiType 90/91/92 로 보내며, 제한속도는 0이라 감속과 무관.
     # 안내 카드의 초록 상자에 거리까지 붙여서 "사고발생 410m 앞" 형태로 보여준다. #문제시 원복(이 함수와 호출부 삭제)
-    names_ko = {90: "사고발생", 91: "공사중", 92: "재난발생"}
-    names_en = {90: "Accident", 91: "Roadwork", 92: "Hazard"}
+    if nSdiType in (90, 91, 92, 93, 94) and self.szIncidentText:
+      return self.szIncidentText
+    names_ko = {90: "사고발생", 91: "공사중", 92: "재난발생", 93: "제한속도 변경", 94: "전방 정체"}
+    names_en = {90: "Accident", 91: "Roadwork", 92: "Hazard", 93: "Speed limit changed", 94: "Traffic jam"}
     names = names_ko if self.lang == "ko" else names_en
     name = names.get(nSdiType)
     if name is None:
@@ -1348,6 +1351,7 @@ class CarrotServ:
 
       ### SDI
       self.nSdiType = _i(json.get("nSdiType"), -1)
+      self.szIncidentText = str(json.get("szIncidentText") or "")  # 돌발정보 문구(앱이 거리까지 만들어 보냄)
       self.nSdiSpeedLimit = _i(json.get("nSdiSpeedLimit"), 0)
       self.nSdiSection = _i(json.get("nSdiSection"), -1)
       self.nSdiDist = _i(json.get("nSdiDist"), -1)
