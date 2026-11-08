@@ -1328,6 +1328,19 @@ class CarrotServ:
       except Exception:
         pass
 
+    # 2026-11-08 사고 알림 계기판 번쩍임: Nda가 새 사고·재난을 알릴 때마다 올리는 번호(nIncidentFlash)가 바뀌면
+    # /dev/shm/incident_flash 파일을 갱신하고, carcontroller가 그 시각 기준 2초 동안 계기판 배경을 빨강으로 번쩍인다.
+    # 처음 받은 번호는 기준으로만 삼고 번쩍이지 않는다(연결 직후 오작동 방지). 문제시 이 블록만 삭제
+    if "nIncidentFlash" in json:
+      try:
+        seq = _i(json.get("nIncidentFlash"), 0)
+        prev = getattr(self, "_incident_flash_seq", None)
+        self._incident_flash_seq = seq
+        if prev is not None and seq == prev + 1:   # 정확히 1 올랐을 때만(앱 재시작으로 번호가 튀면 무시)
+          open("/dev/shm/incident_flash", "w").write(str(seq))
+      except Exception:
+        pass
+
     if "nRoadLimitSpeed" in json:
       #print(json)
       self.active_sdi_count = self.active_sdi_count_max

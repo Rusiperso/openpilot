@@ -1,4 +1,6 @@
 import copy
+import os
+import time
 import numpy as np
 from opendbc.car import CanBusBase
 from opendbc.car.crc import CRC16_XMODEM
@@ -789,6 +791,14 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         #문제시 원복
         #values["BACKGROUND"] = 6 if CS.paddle_button_prev > 0 else 1 if cruise_enabled else 3 if lat_active else 7
         values["BACKGROUND"] = 0 if CS.paddle_button_prev > 0 else 1 if cruise_enabled else 7  # 패들은 표시없음(0), 크루즈 on 파랑(1) / off 회색(7)
+        # 2026-11-08 앞쪽 사고 알림: Nda가 새 사고를 알린 뒤 2초 동안 0.5초씩 빨강 번쩍임(6)을 두 번 보여준 뒤 원래 색으로 복귀.
+        # 파일이 없거나 낡으면 아무 영향 없음. 문제시 이 블록(아래 5줄)만 삭제
+        try:
+          flash_age = time.time() - os.path.getmtime("/dev/shm/incident_flash")
+          if 0 <= flash_age < 2.0 and int(flash_age / 0.5) % 2 == 0 and CS.paddle_button_prev <= 0:
+            values["BACKGROUND"] = 6
+        except OSError:
+          pass
         #문제시 원복
         #values["CENTERLINE"] = 1 if HDA_CntrlModSta > 0 else 0
         values["CENTERLINE"] = 1  # LKA off로 실차 HDA_CntrlModSta가 0이 되어도 차량 블록 아이콘 유지
